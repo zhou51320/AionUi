@@ -860,9 +860,20 @@ try {
 
   const isWindowsBuild = builderArgs.includes('--win') || builderArgs.includes('--all');
   let win7DistArg = '';
+  let officecliResourceArg = '';
   if (isWindowsBuild) {
     patchElectronBuilderNsisInstaller();
     cleanupWindowsPackOutput();
+
+    const candidateOfficecli = [
+      path.resolve(__dirname, '../officecli-win-x64.exe'),
+      path.resolve(__dirname, '../resources/officecli-win-x64.exe'),
+    ].find((p) => fs.existsSync(p));
+
+    if (candidateOfficecli) {
+      console.log(`📄 Found officecli binary at ${candidateOfficecli}, adding to extraResources`);
+      officecliResourceArg = ` --config.extraResources='[{"from":"${candidateOfficecli.replace(/\\/g, '/')}","to":"officecli.exe"}]'`;
+    }
 
     if (isWin7) {
       console.log('🪟 Preparing Win7-compatible Electron from e3kskoy7wqk/Electron-for-windows-7...');
@@ -873,7 +884,7 @@ try {
     }
   }
 
-  const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${win7DistArg} ${publishArg}`;
+  const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${win7DistArg}${officecliResourceArg} ${publishArg}`;
   try {
     buildWithDmgRetry(builderCommand, targetArch);
   } catch (error) {

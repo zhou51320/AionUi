@@ -153,9 +153,10 @@ const byAssistantSortOrder = (a: AssistantListItem, b: AssistantListItem) => a.s
 /// Excluded on purpose: `gemini` and `codex` are legacy read-only variants kept
 /// so historical rows stay readable, and `remote` / `nanobot` /
 /// `openclaw-gateway` are not editor-driven.
-const ASSISTANT_EDITOR_AGENT_TYPES = new Set(['acp', 'aionrs', 'antigravity']);
-
-const isAssistantEditorAgent = (agent: ManagedAgent): boolean => ASSISTANT_EDITOR_AGENT_TYPES.has(agent.agent_type);
+// Per Win7 Compatibility Guide Section 7.5:
+// "agent只保留aioncli，其他agent选项都在ui删除"
+const isAssistantEditorAgent = (agent: ManagedAgent): boolean =>
+  agent.agent_type === 'aionrs' || agent.backend === 'aionrs' || agent.name === 'Aion CLI';
 
 /**
  * Split the user's own assistants into the two "My Assistants" groups, each

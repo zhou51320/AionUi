@@ -96,14 +96,14 @@ class ServerTestCase(unittest.TestCase):
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zf:
             zf.writestr('plugin.json', '{"name": "test-plugin"}')
-        zip_buffer.seek(0)
+        zip_bytes = zip_buffer.getvalue()
 
         # Admin uploads market package
         upload_resp = self.client.post(
             '/api/market/upload',
             headers={'Authorization': f'Bearer {admin_token}'},
             data={
-                'file': (zip_buffer, 'test-plugin.zip'),
+                'file': (io.BytesIO(zip_bytes), 'test-plugin.zip'),
                 'category': 'plugin',
                 'description': 'A test plugin package'
             },
@@ -115,11 +115,10 @@ class ServerTestCase(unittest.TestCase):
         self.assertTrue(file_id > 0)
 
         # Regular user cannot upload
-        zip_buffer.seek(0)
         user_upload_resp = self.client.post(
             '/api/market/upload',
             headers={'Authorization': f'Bearer {user_token}'},
-            data={'file': (zip_buffer, 'test2.zip'), 'category': 'plugin'},
+            data={'file': (io.BytesIO(zip_bytes), 'test2.zip'), 'category': 'plugin'},
             content_type='multipart/form-data'
         )
         self.assertEqual(user_upload_resp.status_code, 403)

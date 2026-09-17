@@ -100,11 +100,17 @@ class SecureModelView(ModelView):
         return redirect(url_for('admin.login', next=request.url))
 
 
+from wtforms import PasswordField
+
+
 class UserView(SecureModelView):
     column_list = ['id', 'username', 'role', 'is_active', 'created_at']
     column_searchable_list = ['username']
     column_filters = ['role', 'is_active']
     form_columns = ['username', 'password', 'role', 'is_active']
+    form_extra_fields = {
+        'password': PasswordField('密码 (留空则使用默认或不修改)')
+    }
     column_labels = {
         'id': 'ID',
         'username': '用户名',

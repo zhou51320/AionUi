@@ -62,18 +62,12 @@ if (-not $SkipDesktop) {
         Write-Host "Checking native modules..." -ForegroundColor Cyan
         
         # Package with electron-builder using Win7-compatible Electron
-        if (-not $ElectronDist -or -not (Test-Path $ElectronDist)) {
-            Write-Host "Resolving Win7 Electron distribution (e3kskoy7wqk/Electron-for-windows-7)..." -ForegroundColor Cyan
-            node scripts/prepare-win7-electron.js
-            $ElectronDist = Join-Path $RootDir ".cache\electron-win7\v37.2.2"
-        }
-
-        if (Test-Path $ElectronDist) {
-            Write-Host "Using Win7-compatible Electron dist: $ElectronDist" -ForegroundColor Green
-            node scripts/build-with-builder.js x64 --win --x64 --config.electronDist="$ElectronDist"
+        if ($ElectronDist -and (Test-Path $ElectronDist)) {
+            Write-Host "Using specified Win7-compatible Electron dist: $ElectronDist" -ForegroundColor Green
+            node scripts/build-with-builder.js x64 --win --x64 --win7 --config.electronDist="$ElectronDist"
         } else {
-            Write-Host "Warning: ElectronDist not found; falling back to default build" -ForegroundColor Yellow
-            node scripts/build-with-builder.js x64 --win --x64
+            Write-Host "Building Windows 7 package with automated Win7 Electron resolution..." -ForegroundColor Green
+            node scripts/build-with-builder.js x64 --win --x64 --win7
         }
     }
     finally {
