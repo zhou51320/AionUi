@@ -227,3 +227,5 @@ incremental = false
 
 [patch.crates-io]
 iana-time-zone = { path = "crates/iana-time-zone" }
+windows-link = { path = "crates/windows-link" }
+
