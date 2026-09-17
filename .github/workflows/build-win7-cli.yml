@@ -1,0 +1,80 @@
+name: '🪟 Build Win7 Aion CLI'
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch, tag or commit to build'
+        required: true
+        default: 'main'
+        type: string
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_HTTP_TIMEOUT: '600'
+  CARGO_NET_RETRY: '10'
+
+jobs:
+  build-win7-cli:
+    name: Build Aion CLI for Windows 7 (x64)
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Install Rust Nightly Toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Setup Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'AionCore -> target'
+
+      - name: Build Aion CLI (x86_64-win7-windows-msvc)
+        shell: bash
+        working-directory: AionCore
+        run: |
+          cargo +nightly build --release \
+            --target x86_64-win7-windows-msvc \
+            -Zbuild-std=std,panic_abort \
+            -p aionui-app
+
+      - name: Verify Windows 7 PE Compatibility
+        shell: powershell
+        run: |
+          $cliPath = "AionCore/target/x86_64-win7-windows-msvc/release/aioncore.exe"
+          if (-not (Test-Path $cliPath)) {
+            Write-Error "Binary not found at $cliPath"
+            exit 1
+          }
+          Write-Host "Verifying PE binary compatibility for Windows 7: $cliPath" -ForegroundColor Green
+          & scripts/verify-win7-compat.ps1 -ExePath $cliPath
+
+      - name: Prepare Artifact
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist/win7-cli"
+          Copy-Item "AionCore/target/x86_64-win7-windows-msvc/release/aioncore.exe" "dist/win7-cli/aioncore.exe"
+          Compress-Archive -Path "dist/win7-cli/*" -DestinationPath "aioncore-win7-x64.zip" -Force
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aioncore-win7-x64
+          path: aioncore-win7-x64.zip
+          retention-days: 14

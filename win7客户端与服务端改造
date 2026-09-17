@@ -1,0 +1,685 @@
+下面是一份**完整的、可直接交给开发 Agent 的 Markdown 设计文档**，把 AionUi 客户端修改和服务端实现写在了一起。你可以直接复制保存为 `aionui-selfhosted-design.md`。
+
+```markdown
+# AionUi 自托管账号与分发系统 — 完整设计文档
+
+> 版本：v1.0
+> 日期：2026-09-17
+> 适用环境：Windows 7 / Python 3.8 / Flask 2.x / SQLite
+> 目标：为 AionUi 客户端提供自托管后端，实现登录鉴权、模型配置同步、市场分发、日志上报
+
+---
+
+## 目录
+
+1. [项目概述](#1-项目概述)
+2. [系统架构](#2-系统架构)
+3. [服务端设计](#3-服务端设计)
+4. [客户端修改设计](#4-客户端修改设计)
+5. [项目结构](#5-项目结构)
+6. [部署与启动](#6-部署与启动)
+7. [开发任务清单](#7-开发任务清单)
+
+---
+
+## 1. 项目概述
+
+### 1.1 背景
+AionUi 官方强制登录，且依赖官方云服务。本项目通过自托管后端 + 客户端补丁的方式，实现：
+- 用户登录鉴权（登录后才能使用客户端）
+- 用户模型源配置同步（API 密钥、Base URL、默认模型）
+- 助手/插件/Skill 压缩包分发（管理员上传，用户下载）
+- 客户端日志上报与查看
+
+### 1.2 目标环境
+| 端 | 环境 |
+|----|------|
+| 服务端 | Windows 7（兼容），Python 3.8 + Flask 2.x + SQLite |
+| 客户端 | AionUi 桌面端（基于 Electron + React） |
+
+### 1.3 设计原则
+- **极简**：只实现明确需要的功能，不做 LLM 网关、会话管理、实时通信
+- **单文件优先**：服务端核心逻辑集中，便于 Win7 部署
+- **Patch 方式改客户端**：不 fork 大改，只对关键文件打补丁
+- **API 驱动**：客户端与服务端通过 HTTP API 交互
+
+### 1.4 明确不做的功能
+- ❌ LLM 网关/模型路由/限流
+- ❌ 多设备配置同步/冲突解决
+- ❌ 市场社区功能（发布、审核、版本管理、评分、搜索）
+- ❌ 上下文/会话管理（由 AionCore 自行处理）
+- ❌ 实时通信（由 AionCore 直连大模型 API）
+- ❌ 异步任务队列
+- ❌ 复杂 RBAC 权限系统
+
+---
+
+## 2. 系统架构
+
+```
+┌─────────────────────────────┐         HTTP API          ┌──────────────────────────────┐
+│                             │  ──────────────────────▶  │                              │
+│   AionUi 客户端（打补丁后）   │                           │   Flask 后端服务              │
+│                             │  ◀──────────────────────  │   (Windows 7 / Python 3.8)   │
+│   - 登录页（本地账号入口）     │                           │                              │
+│   - AuthContext（JWT 存储）   │                           │   ┌──────────────────────┐   │
+│   - ConfigService（拉取配置） │                           │   │  Flask-Admin 管理页   │   │
+│   - 市场页（从自托管下载）     │                           │   └──────────────────────┘   │
+│   - 日志上报钩子              │                           │                              │
+│                             │                           │   ┌──────────────────────┐   │
+└─────────────────────────────┘                           │   │  SQLite 数据库        │   │
+                                                          │   └──────────────────────┘   │
+                                                          │                              │
+                                                          │   ┌──────────────────────┐   │
+                                                          │   │  uploads/ 文件目录    │   │
+                                                          │   └──────────────────────┘   │
+                                                          └──────────────────────────────┘
+```
+
+---
+
+## 3. 服务端设计
+
+### 3.1 数据模型
+
+#### 3.1.1 用户表 `users`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 主键，自增 |
+| username | VARCHAR(64) UNIQUE | 用户名 |
+| password_hash | VARCHAR(256) | 密码哈希（Werkzeug generate_password_hash） |
+| role | VARCHAR(16) | 角色：`admin` / `user` |
+| is_active | BOOLEAN | 是否启用，默认 True |
+| created_at | DATETIME | 创建时间 |
+
+#### 3.1.2 用户模型配置表 `user_configs`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 主键 |
+| user_id | INTEGER FK | 关联 users.id，唯一 |
+| api_key | TEXT | 加密存储的 API 密钥 |
+| base_url | VARCHAR(256) | API 基础地址 |
+| model_name | VARCHAR(128) | 默认模型型号 |
+| extra_config | TEXT | JSON 字符串，预留扩展字段 |
+| updated_at | DATETIME | 最后更新时间 |
+
+> **加密说明**：API 密钥使用 `cryptography.fernet.Fernet` 对称加密，密钥从 `SECRET_KEY` 通过 SHA256 派生。
+
+#### 3.1.3 市场文件表 `market_files`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 主键 |
+| filename | VARCHAR(256) | 原始文件名 |
+| stored_name | VARCHAR(256) | 服务器存储名（UUID + 扩展名） |
+| category | VARCHAR(32) | 分类：`assistant` / `plugin` / `skill` |
+| description | TEXT | 描述 |
+| file_size | INTEGER | 文件大小（字节） |
+| uploader_id | INTEGER FK | 上传管理员 ID |
+| download_count | INTEGER | 下载次数，默认 0 |
+| created_at | DATETIME | 上传时间 |
+
+#### 3.1.4 日志表 `client_logs`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 主键 |
+| user_id | INTEGER FK | 上报用户 ID |
+| level | VARCHAR(16) | 日志级别：INFO/WARN/ERROR |
+| message | TEXT | 日志内容 |
+| client_info | VARCHAR(256) | 客户端版本/系统信息 |
+| created_at | DATETIME | 上报时间 |
+
+### 3.2 API 接口
+
+#### 3.2.1 统一响应格式
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": { }
+}
+```
+
+**错误码约定**：
+
+| code | 含义 |
+|------|------|
+| 0 | 成功 |
+| 400 | 请求参数错误 |
+| 401 | 未登录/Token 无效 |
+| 403 | 权限不足（非管理员） |
+| 404 | 资源不存在 |
+| 500 | 服务器内部错误 |
+
+#### 3.2.2 认证接口
+
+**`POST /api/auth/login`** — 登录
+
+请求体：
+```json
+{ "username": "alice", "password": "xxxxxx" }
+```
+
+响应：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "token": "eyJhbGciOi...",
+    "user": { "id": 1, "username": "alice", "role": "user" }
+  }
+}
+```
+
+**`POST /api/auth/logout`** — 登出（可选，客户端丢弃 Token 即可）
+
+**`GET /api/auth/me`** — 获取当前用户信息（需 Token）
+
+响应：
+```json
+{ "code": 0, "data": { "id": 1, "username": "alice", "role": "user" } }
+```
+
+#### 3.2.3 模型配置接口
+
+**`GET /api/config`** — 获取当前用户配置（需 Token）
+
+响应：
+```json
+{
+  "code": 0,
+  "data": {
+    "api_key": "sk-xxxx",
+    "base_url": "https://api.openai.com/v1",
+    "model_name": "gpt-4o",
+    "extra_config": {}
+  }
+}
+```
+
+**`PUT /api/config`** — 更新当前用户配置（需 Token）
+
+请求体：
+```json
+{
+  "api_key": "sk-xxxx",
+  "base_url": "https://api.openai.com/v1",
+  "model_name": "gpt-4o"
+}
+```
+
+#### 3.2.4 市场接口
+
+**`GET /api/market/files?category=assistant`** — 获取文件列表（需 Token）
+
+响应：
+```json
+{
+  "code": 0,
+  "data": [
+    {
+      "id": 1,
+      "filename": "code-helper.zip",
+      "category": "assistant",
+      "description": "代码助手",
+      "file_size": 10240,
+      "download_count": 5,
+      "created_at": "2026-09-17T10:00:00"
+    }
+  ]
+}
+```
+
+**`GET /api/market/download/<file_id>`** — 下载文件（需 Token）
+
+响应：二进制流，同时 `download_count` +1。
+
+**`POST /api/market/upload`**（仅管理员）— 上传压缩包
+
+请求：`multipart/form-data`
+- `file`: 压缩包
+- `category`: 分类
+- `description`: 描述
+
+**`DELETE /api/market/files/<file_id>`**（仅管理员）— 删除文件
+
+#### 3.2.5 日志接口
+
+**`POST /api/logs`** — 上报日志（需 Token）
+
+请求体：
+```json
+{
+  "level": "ERROR",
+  "message": "模型调用失败：connection timeout",
+  "client_info": "AionUi v1.2.3 / Windows 7"
+}
+```
+
+**`GET /api/logs?level=ERROR&page=1&size=20`**（仅管理员）— 查询日志
+
+响应：
+```json
+{
+  "code": 0,
+  "data": {
+    "total": 100,
+    "items": [
+      {
+        "id": 1,
+        "username": "alice",
+        "level": "ERROR",
+        "message": "...",
+        "created_at": "2026-09-17T11:00:00"
+      }
+    ]
+  }
+}
+```
+
+### 3.3 鉴权设计
+
+#### 3.3.1 JWT 方案
+
+使用 `PyJWT`，Payload：
+```json
+{
+  "user_id": 1,
+  "username": "alice",
+  "role": "user",
+  "exp": 1735689600
+}
+```
+
+- 有效期：7 天
+- 签名算法：HS256
+- 密钥：从环境变量 `SECRET_KEY` 读取
+
+#### 3.3.2 鉴权装饰器
+
+```python
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            return jsonify({"code": 401, "message": "未登录"}), 401
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            g.user = payload
+        except jwt.ExpiredSignatureError:
+            return jsonify({"code": 401, "message": "Token 已过期"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"code": 401, "message": "Token 无效"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @wraps(f)
+    @login_required
+    def decorated(*args, **kwargs):
+        if g.user.get('role') != 'admin':
+            return jsonify({"code": 403, "message": "需要管理员权限"}), 403
+        return f(*args, **kwargs)
+    return decorated
+```
+
+#### 3.3.3 密码与密钥
+
+- **密码**：`werkzeug.security.generate_password_hash` / `check_password_hash`（pbkdf2:sha256）
+- **API 密钥**：`cryptography.fernet.Fernet`，密钥从 `SECRET_KEY` 派生
+
+### 3.4 后台管理页面（Flask-Admin）
+
+#### 3.4.1 页面结构
+
+| 页面 | 路径 | 功能 |
+|------|------|------|
+| 首页 | `/admin/` | 概览（用户数、文件数、日志数） |
+| 用户管理 | `/admin/user/` | 增删改查用户，重置密码，启用/禁用 |
+| 模型配置 | `/admin/userconfig/` | 查看/编辑用户模型配置 |
+| 市场文件 | `/admin/marketfile/` | 上传、删除、编辑文件元数据 |
+| 日志查看 | `/admin/clientlog/` | 按级别/用户/时间筛选日志 |
+
+#### 3.4.2 注册示例
+
+```python
+from flask_admin import Admin
+from flask_admin.contrib.sqla import ModelView
+
+admin = Admin(app, name='AionUi 管理后台')
+
+class UserView(ModelView):
+    column_list = ['id', 'username', 'role', 'is_active', 'created_at']
+    column_searchable_list = ['username']
+    column_filters = ['role', 'is_active']
+    form_excluded_columns = ['password_hash', 'created_at']
+
+    def on_model_change(self, form, model, is_created):
+        if is_created and form.password.data:
+            model.password_hash = generate_password_hash(form.password.data)
+
+admin.add_view(UserView(User, db.session))
+admin.add_view(ModelView(UserConfig, db.session))
+admin.add_view(ModelView(MarketFile, db.session))
+admin.add_view(ModelView(ClientLog, db.session))
+```
+
+**管理员鉴权**：Flask-Admin 默认有自己的登录，建议改为复用 JWT 或使用 `flask-login` 集成，只允许 `role=admin` 的用户访问 `/admin/*`。
+
+### 3.5 服务端项目结构
+
+```
+aionui-backend/
+├── app.py                  # 主入口，Flask 应用初始化
+├── config.py               # 配置（SECRET_KEY、数据库路径、上传目录）
+├── models.py               # SQLAlchemy 数据模型
+├── auth.py                 # JWT 鉴权装饰器、登录逻辑
+├── api/
+│   ├── __init__.py
+│   ├── auth_api.py         # /api/auth/*
+│   ├── config_api.py       # /api/config
+│   ├── market_api.py       # /api/market/*
+│   └── log_api.py          # /api/logs
+├── admin_views.py          # Flask-Admin 视图注册
+├── crypto_utils.py         # API 密钥加解密
+├── requirements.txt
+├── uploads/                # 上传文件存储目录
+└── aionui.db               # SQLite 数据库（运行时生成）
+```
+
+### 3.6 服务端依赖
+
+```
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.5
+Flask-Admin==1.6.1
+PyJWT==2.8.0
+Werkzeug==2.3.7
+cryptography==41.0.7
+```
+
+> 所有依赖需支持 Python 3.8，在 Windows 7 上建议 `pip install --no-cache-dir`。
+
+---
+
+## 4. 客户端修改设计
+
+### 4.1 修改策略
+
+**不 fork 大改**，采用 **runtime patch** 方式，基于 AionUi 某个稳定 release（如 v2.1.37）维护一份 patch 集合。参考 HolySheep 补丁方案的做法：改动文件清单清晰，每次上游更新时重新 apply patch。
+
+### 4.2 需要修改的文件清单
+
+| 文件 | 修改内容 |
+|------|----------|
+| `src/renderer/pages/login/index.tsx` | 登录页增加“本地账号登录”入口 |
+| `src/renderer/context/AuthContext.tsx` | 登录逻辑对接自托管后端，存储 JWT |
+| `src/common/config/configService.ts` | 配置读取改为从自托管后端拉取 |
+| `src/renderer/components/AgentHubModal.tsx` | 市场数据源改为自托管后端 |
+| 主进程日志模块 | 增加日志上报钩子 |
+
+### 4.3 具体修改点
+
+#### 4.3.1 登录页：增加“本地账号登录”入口
+
+**文件**：`src/renderer/pages/login/index.tsx`
+
+**修改**：在原有登录方式（Google OAuth / API Key）下方，保留一个“Sign in with local account”链接。点击后展开表单，用户输入用户名密码，提交到自托管后端。
+
+**逻辑**：
+1. 用户填写 `username` / `password`
+2. 调用 `POST {SELF_HOSTED_BASE}/api/auth/login`
+3. 成功后将返回的 `token` 存入 `AuthContext`
+4. 跳转到主界面
+
+#### 4.3.2 AuthContext：对接 JWT
+
+**文件**：`src/renderer/context/AuthContext.tsx`
+
+**修改**：
+- 新增 `loginWithLocalAccount(username, password)` 方法
+- `login()` 方法增加参数，按情况选择 payload（本地账号 vs 官方）
+- Token 存储位置与原有逻辑一致（localStorage / electron-store）
+
+**伪代码**：
+```tsx
+const loginWithLocalAccount = async (username, password) => {
+  const res = await fetch(`${SELF_HOSTED_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json();
+  if (data.code !== 0) throw new Error(data.message);
+  setToken(data.data.token);
+  setUser(data.data.user);
+};
+```
+
+#### 4.3.3 ConfigService：从自托管后端拉取配置
+
+**文件**：`src/common/config/configService.ts`
+
+**修改**：在 `initialize()` 逻辑中，登录成功后调用 `GET /api/config`，把返回的 `api_key`、`base_url`、`model_name` **写入本地配置存储**，后续 AionUi 读配置时就会用下发的值。
+
+**伪代码**：
+```ts
+async initialize() {
+  const token = getToken();
+  if (token) {
+    const res = await fetch(`${SELF_HOSTED_BASE}/api/config`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await res.json();
+    if (data.code === 0) {
+      await this.setConfig({
+        apiKey: data.data.api_key,
+        baseUrl: data.data.base_url,
+        modelName: data.data.model_name,
+      });
+    }
+  }
+}
+```
+
+#### 4.3.4 市场页：改为从自托管下载
+
+**文件**：`src/renderer/components/AgentHubModal.tsx`
+
+**修改**：数据源从官方 AionHub 改为 `GET /api/market/files`。下载后的解压导入逻辑**复用 AionUi 现有的 Skill 导入功能**（v2.1.9 已支持从 zip 导入 Skill，压缩包格式正好匹配）。
+
+**伪代码**：
+```tsx
+const loadMarketFiles = async () => {
+  const res = await fetch(`${SELF_HOSTED_BASE}/api/market/files`, {
+    headers: { 'Authorization': `Bearer ${getToken()}` },
+  });
+  const data = await res.json();
+  setFiles(data.data);
+};
+
+const downloadAndImport = async (fileId) => {
+  const res = await fetch(`${SELF_HOSTED_BASE}/api/market/download/${fileId}`, {
+    headers: { 'Authorization': `Bearer ${getToken()}` },
+  });
+  const blob = await res.blob();
+  // 复用现有 Skill 导入逻辑
+  await importSkillFromZip(blob);
+};
+```
+
+#### 4.3.5 日志上报钩子
+
+**位置**：主进程日志模块
+
+**修改**：在关键路径（登录成功、模型调用失败、配置变更）插入 `POST /api/logs` 调用。写入本地日志的同时，异步上报一份。
+
+**伪代码**：
+```ts
+function reportLog(level, message, clientInfo) {
+  fetch(`${SELF_HOSTED_BASE}/api/logs`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${getToken()}`,
+    },
+    body: JSON.stringify({ level, message, client_info: clientInfo }),
+  }).catch(() => {}); // 静默失败，不阻塞主流程
+}
+```
+
+### 4.4 客户端配置项
+
+在客户端新增一个配置项 `SELF_HOSTED_BASE`，指向自托管后端地址（如 `http://192.168.1.100:5000`）。可通过环境变量或配置文件注入。
+
+---
+
+## 5. 项目结构（整体）
+
+```
+aionui-selfhosted/
+├── server/                          # 服务端
+│   ├── app.py
+│   ├── config.py
+│   ├── models.py
+│   ├── auth.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── auth_api.py
+│   │   ├── config_api.py
+│   │   ├── market_api.py
+│   │   └── log_api.py
+│   ├── admin_views.py
+│   ├── crypto_utils.py
+│   ├── requirements.txt
+│   └── uploads/
+├── client-patches/                  # 客户端补丁
+│   ├── login.patch
+│   ├── auth-context.patch
+│   ├── config-service.patch
+│   ├── market.patch
+│   └── log-report.patch
+└── README.md
+```
+
+---
+
+## 6. 部署与启动
+
+### 6.1 服务端初始化
+
+```bash
+# 安装依赖
+pip install -r requirements.txt
+
+# 设置环境变量（Windows）
+set SECRET_KEY=your-secret-key-here
+set FLASK_ENV=production
+
+# 初始化数据库并创建默认管理员
+python app.py --init
+```
+
+**`--init` 逻辑**：创建所有表，若 `users` 表为空则创建默认管理员（用户名 `admin`，密码 `admin123`，首次登录后强制修改）。
+
+### 6.2 启动服务
+
+```bash
+python app.py
+```
+
+默认监听 `0.0.0.0:5000`。
+
+### 6.3 客户端对接流程
+
+1. 客户端启动 → 展示登录页
+2. 用户选择“本地账号登录” → 调用 `POST /api/auth/login`
+3. 登录成功 → 调用 `GET /api/config` 拉取模型配置，写入本地
+4. 进入主界面 → 市场页调用 `GET /api/market/files`
+5. 关键操作 → 上报日志到 `POST /api/logs`
+
+---
+
+## 7. 开发任务清单
+
+### 7.1 服务端任务
+
+- [ ] 初始化 Flask 项目结构
+- [ ] 定义 SQLAlchemy 数据模型（users / user_configs / market_files / client_logs）
+- [ ] 实现 JWT 鉴权装饰器（login_required / admin_required）
+- [ ] 实现密码哈希与 API 密钥加解密工具
+- [ ] 实现认证接口（login / logout / me）
+- [ ] 实现配置接口（GET / PUT /api/config）
+- [ ] 实现市场接口（list / download / upload / delete）
+- [ ] 实现日志接口（POST /api/logs，GET /api/logs）
+- [ ] 集成 Flask-Admin，注册四个模型视图
+- [ ] 实现 `--init` 初始化逻辑（建表 + 默认管理员）
+- [ ] 编写 requirements.txt 并锁定版本
+- [ ] 在 Windows 7 上验证启动
+
+### 7.2 客户端任务
+
+- [ ] 确定 AionUi 基线版本（如 v2.1.37）
+- [ ] 登录页增加“本地账号登录”入口
+- [ ] AuthContext 对接自托管 JWT
+- [ ] ConfigService 从自托管后端拉取配置
+- [ ] 市场页数据源改为自托管后端
+- [ ] 日志上报钩子接入关键路径
+- [ ] 新增 `SELF_HOSTED_BASE` 配置项
+- [ ] 生成 patch 文件并验证 apply
+
+### 7.3 联调任务
+
+- [ ] 服务端启动，客户端登录成功
+- [ ] 配置拉取并写入本地生效
+- [ ] 市场文件下载并导入成功
+- [ ] 日志上报并在管理页可见
+- [ ] 管理页 CRUD 功能正常
+
+---
+
+## 8. 安全注意事项
+
+| 风险 | 缓解措施 |
+|------|----------|
+| API 密钥泄露 | 数据库加密存储，传输使用 HTTPS（建议前置 Nginx） |
+| 密码暴力破解 | 登录接口增加简单限流（同一 IP 每分钟最多 5 次） |
+| 未授权访问 | 所有业务接口强制 `login_required`，管理接口 `admin_required` |
+| 文件上传漏洞 | 仅允许 `.zip` 扩展名，限制文件大小（如 50MB） |
+| SQL 注入 | 全程使用 SQLAlchemy ORM，不拼接 SQL |
+| Token 泄露 | 设置合理过期时间，客户端安全存储 |
+
+---
+
+## 9. 后续可扩展点（不在本期范围）
+
+- 用户注册自助页面（当前由管理员创建）
+- 市场文件的版本管理
+- 日志的聚合统计图表
+- 多模型源配置（当前单源）
+- HTTPS 自动证书（Let's Encrypt）
+
+---
+
+## 10. 附录：关键参考
+
+- AionUi 官方仓库：`iOfficeAI/AionUi`
+- HolySheep 补丁方案：参考其 patch 文件清单和修改思路
+- Flask-Admin 文档：https://flask-admin.readthedocs.io/
+- PyJWT 文档：https://pyjwt.readthedocs.io/
+
+---
+
+
+
+
+**文档结束**
+```
+
+这份文档已经把服务端和客户端的全部设计要点合并在一起，开发 Agent 可以直接按目录和任务清单逐项实现。如果你需要我针对某个模块（比如客户端 patch 的具体 diff 格式）再展开，可以告诉我。

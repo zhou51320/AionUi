@@ -614,12 +614,13 @@ const skipVite = args.includes('--skip-vite');
 const skipNative = args.includes('--skip-native');
 const packOnly = args.includes('--pack-only');
 const forceBuild = args.includes('--force');
+const isWin7 = args.includes('--win7') || process.env.ELECTRON_WIN7 === '1';
 
 const builderArgs = args
   .filter((arg) => {
     // Filter out 'auto', architecture flags, and special flags
     if (arg === 'auto') return false;
-    if (arg === '--skip-vite' || arg === '--skip-native' || arg === '--pack-only' || arg === '--force') return false;
+    if (arg === '--skip-vite' || arg === '--skip-native' || arg === '--pack-only' || arg === '--force' || arg === '--win7') return false;
     if (archList.includes(arg)) return false;
     if (arg.startsWith('--') && archList.includes(arg.slice(2))) return false;
     return true;
@@ -858,12 +859,21 @@ try {
   }
 
   const isWindowsBuild = builderArgs.includes('--win') || builderArgs.includes('--all');
+  let win7DistArg = '';
   if (isWindowsBuild) {
     patchElectronBuilderNsisInstaller();
     cleanupWindowsPackOutput();
+
+    if (isWin7) {
+      console.log('🪟 Preparing Win7-compatible Electron from e3kskoy7wqk/Electron-for-windows-7...');
+      execSync('node scripts/prepare-win7-electron.js', { stdio: 'inherit' });
+      const win7DistPath = path.resolve(__dirname, '../.cache/electron-win7/v37.2.2');
+      win7DistArg = ` --config.electronDist="${win7DistPath}"`;
+      console.log(`🪟 Using Win7 Electron dist: ${win7DistPath}`);
+    }
   }
 
-  const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${publishArg}`;
+  const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${win7DistArg} ${publishArg}`;
   try {
     buildWithDmgRetry(builderCommand, targetArch);
   } catch (error) {

@@ -5,6 +5,7 @@ import { changeLanguage } from '@/renderer/services/i18n';
 import { useNavigate } from 'react-router-dom';
 import AppLoader from '@renderer/components/layout/AppLoader';
 import { useAuth } from '../../hooks/context/AuthContext';
+import { getSelfHostedBaseUrl } from '@/common/config/selfHosted';
 import './LoginPage.css';
 
 type MessageState = {
@@ -38,6 +39,8 @@ const LoginPage: React.FC = () => {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [serverUrl, setServerUrl] = useState(() => getSelfHostedBaseUrl());
+  const [showServerConfig, setShowServerConfig] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [message, setMessage] = useState<MessageState | null>(null);
@@ -143,7 +146,7 @@ const LoginPage: React.FC = () => {
       setLoading(true);
       setMessage(null);
 
-      const result = await login({ username: trimmedUsername, password, remember: rememberMe });
+      const result = await login({ username: trimmedUsername, password, remember: rememberMe, serverUrl });
 
       if (result.success) {
         if (rememberMe) {
@@ -184,7 +187,7 @@ const LoginPage: React.FC = () => {
 
       setLoading(false);
     },
-    [login, navigate, password, rememberMe, showMessage, t, username]
+    [login, navigate, password, rememberMe, serverUrl, showMessage, t, username]
   );
 
   if (status === 'checking') {
@@ -313,6 +316,35 @@ const LoginPage: React.FC = () => {
               onChange={(event) => setRememberMe(event.target.checked)}
             />
             <label htmlFor='remember-me'>{t('login.rememberMe')}</label>
+          </div>
+
+          <div className='login-page__form-item' style={{ marginTop: -4, marginBottom: 12 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+                fontSize: 12,
+                color: 'var(--color-text-3, #86909c)',
+              }}
+              onClick={() => setShowServerConfig((prev) => !prev)}
+            >
+              <span>{t('login.serverAddress', { defaultValue: '自托管服务地址' })}</span>
+              <span>{showServerConfig ? '▲' : '▼'}</span>
+            </div>
+            {showServerConfig && (
+              <div className='login-page__input-wrapper' style={{ marginTop: 6 }}>
+                <input
+                  name='serverUrl'
+                  className='login-page__input'
+                  placeholder='http://127.0.0.1:5000'
+                  value={serverUrl}
+                  onChange={(event) => setServerUrl(event.target.value)}
+                />
+              </div>
+            )}
           </div>
 
           <button type='submit' className='login-page__submit' disabled={loading}>

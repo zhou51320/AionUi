@@ -1,4 +1,5 @@
 import type { ConfigKey, ConfigKeyMap } from './configKeys';
+import { getSelfHostedBaseUrl, getSelfHostedToken } from './selfHosted';
 
 type Subscriber = (value: unknown) => void;
 
@@ -64,12 +65,48 @@ class ConfigServiceImpl {
         }
       }
       this.initialized = true;
+      void this.syncFromSelfHosted();
     })();
     this.initPromise.catch(() => {
       // Allow a future caller to retry after a transient failure
       this.initPromise = null;
     });
     return this.initPromise;
+  }
+
+  async syncFromSelfHosted(): Promise<void> {
+    const token = getSelfHostedToken();
+    if (!token) return;
+    try {
+      const baseUrl = getSelfHostedBaseUrl();
+      const res = await fetch(`${baseUrl}/api/config`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.code === 0 && json.data) {
+          const cfg = json.data;
+          if (cfg.model_name) {
+            this.cache.set('synced_model_name', cfg.model_name);
+          }
+          if (cfg.base_url) {
+            this.cache.set('synced_base_url', cfg.base_url);
+          }
+          if (cfg.api_key) {
+            this.cache.set('synced_api_key', cfg.api_key);
+          }
+          if (cfg.extra_config && typeof cfg.extra_config === 'object') {
+            for (const [k, v] of Object.entries(cfg.extra_config)) {
+              this.cache.set(`synced_${k}`, v);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('ConfigService: failed to sync from self-hosted backend:', err);
+    }
   }
 
   whenReady(): Promise<void> {

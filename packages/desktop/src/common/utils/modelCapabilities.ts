@@ -64,6 +64,21 @@ export const getBaseModelName = (modelName: string): string => {
 
 export type ModelOpenAiApiModeChoice = ModelOpenAiApiMode | 'auto';
 export type ModelImageInputChoice = ModelImageInputCapability | 'auto';
+export type ModelContextLimitChoice = number | 'auto';
+
+/** Auto-detect default context window (in tokens) based on model name. */
+export const detectModelContextLimit = (modelName: string): number => {
+  const normalized = getBaseModelName(modelName);
+  if (/gemini-1\.5|gemini-2/i.test(normalized)) return 1_000_000;
+  if (/claude-3/i.test(normalized)) return 200_000;
+  if (/deepseek/i.test(normalized)) return 64_000;
+  if (/gpt-4o|gpt-4-turbo|o1|o3/i.test(normalized)) return 128_000;
+  if (/qwen-2\.5|qwen-max|qwen-plus/i.test(normalized)) return 128_000;
+  if (/llama-3\.[123]/i.test(normalized)) return 128_000;
+  if (/gpt-4/i.test(normalized)) return 8_192;
+  if (/gpt-3\.5/i.test(normalized)) return 16_385;
+  return 128_000;
+};
 
 /** Whether a provider/model protocol can select an OpenAI wire API. */
 export const supportsOpenAiApiMode = (platform: string, modelProtocol = 'openai'): boolean => {
@@ -76,12 +91,14 @@ export const updateModelSettings = (
   current: Record<string, ModelSettings> | undefined,
   modelIds: string[],
   imageInput: ModelImageInputChoice,
-  openAiApiMode: ModelOpenAiApiModeChoice
+  openAiApiMode: ModelOpenAiApiModeChoice,
+  contextLimit?: ModelContextLimitChoice
 ): Record<string, ModelSettings> => {
   const next = { ...current };
 
   for (const modelId of modelIds) {
-    if (imageInput === 'auto' && openAiApiMode === 'auto') {
+    const isAutoLimit = contextLimit === undefined || contextLimit === 'auto' || (typeof contextLimit === 'number' && contextLimit <= 0);
+    if (imageInput === 'auto' && openAiApiMode === 'auto' && isAutoLimit) {
       delete next[modelId];
       continue;
     }
@@ -89,6 +106,7 @@ export const updateModelSettings = (
     const settings: ModelSettings = {};
     if (imageInput !== 'auto') settings.image_input = imageInput;
     if (openAiApiMode !== 'auto') settings.openai_api_mode = openAiApiMode;
+    if (!isAutoLimit && typeof contextLimit === 'number') settings.context_limit = contextLimit;
     next[modelId] = settings;
   }
 

@@ -1,0 +1,521 @@
+diff --git a/packages/desktop/src/common/config/selfHosted.ts b/packages/desktop/src/common/config/selfHosted.ts
+new file mode 100644
+index 000000000..12a75076f
+--- /dev/null
++++ b/packages/desktop/src/common/config/selfHosted.ts
+@@ -0,0 +1,86 @@
++/**
++ * @license
++ * Copyright 2025 AionUi (aionui.com)
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++export const SELF_HOSTED_BASE_KEY = 'self_hosted_base_url';
++export const SELF_HOSTED_TOKEN_KEY = 'self_hosted_jwt_token';
++export const SELF_HOSTED_USER_KEY = 'self_hosted_user_info';
++export const DEFAULT_SELF_HOSTED_BASE = 'http://127.0.0.1:5000';
++
++export interface SelfHostedUser {
++  id: number | string;
++  username: string;
++  role: 'admin' | 'user' | string;
++}
++
++export function getSelfHostedBaseUrl(): string {
++  if (typeof window !== 'undefined' && window.localStorage) {
++    const custom = window.localStorage.getItem(SELF_HOSTED_BASE_KEY);
++    if (custom && custom.trim()) {
++      return custom.trim().replace(/\/+$/, '');
++    }
++  }
++  if (typeof process !== 'undefined' && process.env && process.env.SELF_HOSTED_BASE) {
++    return process.env.SELF_HOSTED_BASE.trim().replace(/\/+$/, '');
++  }
++  return DEFAULT_SELF_HOSTED_BASE;
++}
++
++export function setSelfHostedBaseUrl(url: string): void {
++  if (typeof window !== 'undefined' && window.localStorage) {
++    const trimmed = url.trim().replace(/\/+$/, '');
++    if (trimmed) {
++      window.localStorage.setItem(SELF_HOSTED_BASE_KEY, trimmed);
++    } else {
++      window.localStorage.removeItem(SELF_HOSTED_BASE_KEY);
++    }
++  }
++}
++
++export function getSelfHostedToken(): string | null {
++  if (typeof window !== 'undefined' && window.localStorage) {
++    return window.localStorage.getItem(SELF_HOSTED_TOKEN_KEY);
++  }
++  return null;
++}
++
++export function setSelfHostedToken(token: string | null): void {
++  if (typeof window !== 'undefined' && window.localStorage) {
++    if (token) {
++      window.localStorage.setItem(SELF_HOSTED_TOKEN_KEY, token);
++    } else {
++      window.localStorage.removeItem(SELF_HOSTED_TOKEN_KEY);
++    }
++  }
++}
++
++export function getSelfHostedUser(): SelfHostedUser | null {
++  if (typeof window !== 'undefined' && window.localStorage) {
++    const raw = window.localStorage.getItem(SELF_HOSTED_USER_KEY);
++    if (raw) {
++      try {
++        return JSON.parse(raw) as SelfHostedUser;
++      } catch {
++        return null;
++      }
++    }
++  }
++  return null;
++}
++
++export function setSelfHostedUser(user: SelfHostedUser | null): void {
++  if (typeof window !== 'undefined' && window.localStorage) {
++    if (user) {
++      window.localStorage.setItem(SELF_HOSTED_USER_KEY, JSON.stringify(user));
++    } else {
++      window.localStorage.removeItem(SELF_HOSTED_USER_KEY);
++    }
++  }
++}
++
++export function clearSelfHostedAuth(): void {
++  setSelfHostedToken(null);
++  setSelfHostedUser(null);
++}
+diff --git a/packages/desktop/src/common/config/configService.ts b/packages/desktop/src/common/config/configService.ts
+index cf0c2d87e..a91c5394a 100644
+--- a/packages/desktop/src/common/config/configService.ts
++++ b/packages/desktop/src/common/config/configService.ts
+@@ -1,4 +1,5 @@
+ import type { ConfigKey, ConfigKeyMap } from './configKeys';
++import { getSelfHostedBaseUrl, getSelfHostedToken } from './selfHosted';
+ 
+ type Subscriber = (value: unknown) => void;
+ 
+@@ -64,6 +65,7 @@ class ConfigServiceImpl {
+         }
+       }
+       this.initialized = true;
++      void this.syncFromSelfHosted();
+     })();
+     this.initPromise.catch(() => {
+       // Allow a future caller to retry after a transient failure
+@@ -72,6 +74,41 @@ class ConfigServiceImpl {
+     return this.initPromise;
+   }
+ 
++  async syncFromSelfHosted(): Promise<void> {
++    const token = getSelfHostedToken();
++    if (!token) return;
++    try {
++      const baseUrl = getSelfHostedBaseUrl();
++      const res = await fetch(`${baseUrl}/api/config`, {
++        headers: {
++          Authorization: `Bearer ${token}`,
++        },
++      });
++      if (res.ok) {
++        const json = await res.json();
++        if (json.code === 0 && json.data) {
++          const cfg = json.data;
++          if (cfg.model_name) {
++            this.cache.set('synced_model_name', cfg.model_name);
++          }
++          if (cfg.base_url) {
++            this.cache.set('synced_base_url', cfg.base_url);
++          }
++          if (cfg.api_key) {
++            this.cache.set('synced_api_key', cfg.api_key);
++          }
++          if (cfg.extra_config && typeof cfg.extra_config === 'object') {
++            for (const [k, v] of Object.entries(cfg.extra_config)) {
++              this.cache.set(`synced_${k}`, v);
++            }
++          }
++        }
++      }
++    } catch (err) {
++      console.warn('ConfigService: failed to sync from self-hosted backend:', err);
++    }
++  }
++
+   whenReady(): Promise<void> {
+     return this.initialize();
+   }
+diff --git a/packages/desktop/src/renderer/hooks/context/AuthContext.tsx b/packages/desktop/src/renderer/hooks/context/AuthContext.tsx
+index 6e56c9448..cd54c9596 100644
+--- a/packages/desktop/src/renderer/hooks/context/AuthContext.tsx
++++ b/packages/desktop/src/renderer/hooks/context/AuthContext.tsx
+@@ -1,6 +1,17 @@
+ import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+ import { PREVIEW_SCOPE_KEY_PREFIX } from '@/renderer/pages/conversation/Preview/context/previewScope';
+ import { refreshSession } from '@/common/adapter/sessionRefresh';
++import {
++  getSelfHostedBaseUrl,
++  setSelfHostedBaseUrl,
++  getSelfHostedToken,
++  setSelfHostedToken,
++  getSelfHostedUser,
++  setSelfHostedUser,
++  clearSelfHostedAuth,
++} from '@/common/config/selfHosted';
++import { reportLog } from '@/common/logger/reportLog';
++
+ // M6: CSRF removed with legacy webserver — stub functions for compatibility, re-implement in M7
+ const withCsrfToken = <T extends Record<string, unknown>>(data: T): T => data;
+ const hasValidCsrfToken = (): boolean => true;
+@@ -12,12 +23,14 @@ type AuthStatus = 'checking' | 'authenticated' | 'unauthenticated';
+ export interface AuthUser {
+   id: string;
+   username: string;
++  role?: string;
+ }
+ 
+ interface LoginParams {
+   username: string;
+   password: string;
+   remember?: boolean;
++  serverUrl?: string;
+ }
+ 
+ type LoginErrorCode =
+@@ -135,18 +148,50 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
+   const abortRef = useRef<AbortController | null>(null);
+ 
+   const refresh = useCallback(async () => {
++    abortRef.current?.abort();
++    const controller = new AbortController();
++    abortRef.current = controller;
++    setStatus('checking');
++
++    // First check self-hosted JWT token if present
++    const selfHostedToken = getSelfHostedToken();
++    if (selfHostedToken) {
++      try {
++        const baseUrl = getSelfHostedBaseUrl();
++        const response = await fetch(`${baseUrl}/api/auth/me`, {
++          headers: {
++            Authorization: `Bearer ${selfHostedToken}`,
++          },
++          signal: controller.signal,
++        });
++        if (response.ok) {
++          const resJson = await response.json();
++          if (resJson.code === 0 && resJson.data) {
++            setUser({
++              id: String(resJson.data.id),
++              username: resJson.data.username,
++              role: resJson.data.role,
++            });
++            setStatus('authenticated');
++            setReady(true);
++            return;
++          }
++        }
++      } catch (err) {
++        if ((err as Error).name === 'AbortError') return;
++        console.warn('Self-hosted auth verification failed:', err);
++      }
++      clearSelfHostedAuth();
++    }
++
+     if (isDesktopRuntime) {
+-      setStatus('authenticated');
++      // In desktop runtime, unauthenticated state triggers login form for local account
+       setUser(null);
++      setStatus('unauthenticated');
+       setReady(true);
+       return;
+     }
+ 
+-    abortRef.current?.abort();
+-    const controller = new AbortController();
+-    abortRef.current = controller;
+-    setStatus('checking');
+-
+     const currentUser = await fetchCurrentUser(controller.signal);
+     if (currentUser) {
+       setUser(currentUser);
+@@ -165,24 +210,70 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
+     };
+   }, [refresh]);
+ 
+-  const login = useCallback(async ({ username, password, remember }: LoginParams): Promise<LoginResult> => {
++  const login = useCallback(async ({ username, password, remember, serverUrl }: LoginParams): Promise<LoginResult> => {
+     try {
++      if (serverUrl) {
++        setSelfHostedBaseUrl(serverUrl);
++      }
++      const baseUrl = getSelfHostedBaseUrl();
++
++      // Try self-hosted backend login
++      try {
++        const response = await fetch(`${baseUrl}/api/auth/login`, {
++          method: 'POST',
++          headers: {
++            'Content-Type': 'application/json',
++          },
++          body: JSON.stringify({ username, password }),
++        });
++
++        const data = await response.json();
++        if (response.ok && data.code === 0 && data.data?.token) {
++          const token = data.data.token;
++          const userInfo = data.data.user;
++          setSelfHostedToken(token);
++          setSelfHostedUser(userInfo);
++          setUser({
++            id: String(userInfo.id),
++            username: userInfo.username,
++            role: userInfo.role,
++          });
++          setStatus('authenticated');
++          setReady(true);
++          reportLog('INFO', `User ${username} logged in successfully`);
++          return { success: true };
++        } else if (response.status === 401 || (data && data.code !== 0)) {
++          return {
++            success: false,
++            message: data?.message || '用户名或密码错误',
++            code: 'invalidCredentials',
++          };
++        }
++      } catch (selfHostedError) {
++        if (isDesktopRuntime) {
++          console.error('Self-hosted server login failed:', selfHostedError);
++          return {
++            success: false,
++            message: '无法连接到自托管服务器，请确认服务端已启动且地址正确',
++            code: 'networkError',
++          };
++        }
++      }
++
+       if (isDesktopRuntime) {
+-        setReady(true);
+-        return { success: true };
++        return {
++          success: false,
++          message: '登录失败，请检查自托管服务器连接',
++          code: 'networkError',
++        };
+       }
+ 
+-      // Check CSRF token availability before login
+-      // If token is missing, clear cache and inform user
++      // Fallback for web mode
+       const csrfTokenValid = hasValidCsrfToken();
+       if (!csrfTokenValid) {
+-        console.warn('CSRF token missing or invalid, clearing cache');
+         clearAuthCache();
+-        // Allow login to proceed anyway - server will set new token
+       }
+ 
+-      // P1 安全修复：登录请求需要 CSRF Token / P1 Security fix: Login needs CSRF token
+-      // Backend route is /login; web-host's static-server explicitly proxies it.
+       const response = await fetch('/login', {
+         method: 'POST',
+         headers: {
+@@ -199,38 +290,10 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
+       };
+ 
+       if (!response.ok || !data.success || !data.user) {
+-        let code: LoginErrorCode = 'unknown';
+-        let message = data?.message ?? 'Login failed';
+-        let shouldClearCache = false;
+-
+-        if (response.status === 401) {
+-          code = 'invalidCredentials';
+-        } else if (response.status === 403) {
+-          // CSRF validation failed - clear cache
+-          code = 'csrfError';
+-          message = 'Security token expired. Please try again.';
+-          shouldClearCache = true;
+-        } else if (response.status === 429) {
+-          code = 'tooManyAttempts';
+-        } else if (response.status >= 500) {
+-          code = 'serverError';
+-        } else if (!csrfTokenValid) {
+-          // If we knew CSRF was invalid and login failed, suggest cache clear
+-          code = 'csrfError';
+-          message = 'Login failed due to cached data. Please clear your browser cache and try again.';
+-          shouldClearCache = true;
+-        }
+-
+-        // Clear cache on CSRF-related errors
+-        if (shouldClearCache) {
+-          clearAuthCache();
+-        }
+-
+         return {
+           success: false,
+-          message,
+-          code,
+-          shouldClearCache,
++          message: data?.message ?? 'Login failed',
++          code: response.status === 401 ? 'invalidCredentials' : 'serverError',
+         };
+       }
+ 
+@@ -238,28 +301,9 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
+       setStatus('authenticated');
+       setReady(true);
+ 
+-      // Re-enable WebSocket reconnection after successful login (WebUI mode only)
+-      if (typeof window !== 'undefined' && (window as any).__websocketReconnect) {
+-        (window as any).__websocketReconnect();
+-      }
+-
+       return { success: true };
+     } catch (error) {
+       console.error('Login request failed:', error);
+-
+-      // Check if error is related to CSRF token parsing
+-      const errorMessage = (error as Error).message;
+-      if (errorMessage?.includes('parse') || errorMessage?.includes('csrf') || errorMessage?.includes('cookie')) {
+-        // CSRF or cookie parsing error - clear cache
+-        clearAuthCache();
+-        return {
+-          success: false,
+-          message: 'Login failed due to cached data. Please clear your browser cache and try again.',
+-          code: 'csrfError',
+-          shouldClearCache: true,
+-        };
+-      }
+-
+       return {
+         success: false,
+         message: 'Network error. Please try again.',
+@@ -269,30 +313,29 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
+   }, []);
+ 
+   const logout = useCallback(async () => {
+-    if (isDesktopRuntime) {
+-      setUser(null);
+-      setStatus('authenticated');
+-      setReady(true);
+-      return;
+-    }
+-
+     try {
+-      await fetch('/logout', {
+-        method: 'POST',
+-        // Logout also needs CSRF token / 登出同样需要 CSRF Token
+-        headers: {
+-          'Content-Type': 'application/json',
+-        },
+-        credentials: 'include',
+-        body: JSON.stringify(withCsrfToken({})),
+-      });
+-    } catch (error) {
+-      console.error('Logout request failed:', error);
++      const baseUrl = getSelfHostedBaseUrl();
++      const token = getSelfHostedToken();
++      if (token) {
++        void fetch(`${baseUrl}/api/auth/logout`, {
++          method: 'POST',
++          headers: { Authorization: `Bearer ${token}` },
++        }).catch(() => {});
++      }
++      if (!isDesktopRuntime) {
++        await fetch('/logout', {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          credentials: 'include',
++          body: JSON.stringify(withCsrfToken({})),
++        }).catch(() => {});
++      }
+     } finally {
++      clearSelfHostedAuth();
++      clearAuthCache();
+       setUser(null);
+       setStatus('unauthenticated');
+-      // Clear cache on logout for security
+-      clearAuthCache();
++      setReady(true);
+     }
+   }, []);
+ 
+diff --git a/packages/desktop/src/renderer/pages/login/index.tsx b/packages/desktop/src/renderer/pages/login/index.tsx
+index 827a71714..4dcc1b081 100644
+--- a/packages/desktop/src/renderer/pages/login/index.tsx
++++ b/packages/desktop/src/renderer/pages/login/index.tsx
+@@ -5,6 +5,7 @@ import { changeLanguage } from '@/renderer/services/i18n';
+ import { useNavigate } from 'react-router-dom';
+ import AppLoader from '@renderer/components/layout/AppLoader';
+ import { useAuth } from '../../hooks/context/AuthContext';
++import { getSelfHostedBaseUrl } from '@/common/config/selfHosted';
+ import './LoginPage.css';
+ 
+ type MessageState = {
+@@ -38,6 +39,8 @@ const LoginPage: React.FC = () => {
+ 
+   const [username, setUsername] = useState('');
+   const [password, setPassword] = useState('');
++  const [serverUrl, setServerUrl] = useState(() => getSelfHostedBaseUrl());
++  const [showServerConfig, setShowServerConfig] = useState(false);
+   const [rememberMe, setRememberMe] = useState(false);
+   const [passwordVisible, setPasswordVisible] = useState(false);
+   const [message, setMessage] = useState<MessageState | null>(null);
+@@ -143,7 +146,7 @@ const LoginPage: React.FC = () => {
+       setLoading(true);
+       setMessage(null);
+ 
+-      const result = await login({ username: trimmedUsername, password, remember: rememberMe });
++      const result = await login({ username: trimmedUsername, password, remember: rememberMe, serverUrl });
+ 
+       if (result.success) {
+         if (rememberMe) {
+@@ -184,7 +187,7 @@ const LoginPage: React.FC = () => {
+ 
+       setLoading(false);
+     },
+-    [login, navigate, password, rememberMe, showMessage, t, username]
++    [login, navigate, password, rememberMe, serverUrl, showMessage, t, username]
+   );
+ 
+   if (status === 'checking') {
+@@ -315,6 +318,35 @@ const LoginPage: React.FC = () => {
+             <label htmlFor='remember-me'>{t('login.rememberMe')}</label>
+           </div>
+ 
++          <div className='login-page__form-item' style={{ marginTop: -4, marginBottom: 12 }}>
++            <div
++              style={{
++                display: 'flex',
++                justifyContent: 'space-between',
++                alignItems: 'center',
++                cursor: 'pointer',
++                userSelect: 'none',
++                fontSize: 12,
++                color: 'var(--color-text-3, #86909c)',
++              }}
++              onClick={() => setShowServerConfig((prev) => !prev)}
++            >
++              <span>{t('login.serverAddress', { defaultValue: '自托管服务地址' })}</span>
++              <span>{showServerConfig ? '▲' : '▼'}</span>
++            </div>
++            {showServerConfig && (
++              <div className='login-page__input-wrapper' style={{ marginTop: 6 }}>
++                <input
++                  name='serverUrl'
++                  className='login-page__input'
++                  placeholder='http://127.0.0.1:5000'
++                  value={serverUrl}
++                  onChange={(event) => setServerUrl(event.target.value)}
++                />
++              </div>
++            )}
++          </div>
++
+           <button type='submit' className='login-page__submit' disabled={loading}>
+             {loading && (
+               <svg className='login-page__spinner' viewBox='0 0 24 24' width='18' height='18'>

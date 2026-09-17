@@ -1,0 +1,9 @@
+[net]
+git-fetch-with-cli = true
+
+# Windows 7 Tier 3 compilation target configuration
+# Statically links the C runtime to avoid MSVCR dependencies incompatible with Win7
+[target.x86_64-win7-windows-msvc]
+rustflags = [
+    "-C", "target-feature=+crt-static",
+]
