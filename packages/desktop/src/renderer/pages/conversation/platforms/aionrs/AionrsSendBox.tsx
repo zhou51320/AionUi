@@ -55,6 +55,10 @@ import { useTranslation } from 'react-i18next';
 import { classifyConversationBusyError } from '../conversationBusyError';
 import { useAionrsMessage } from './useAionrsMessage';
 import type { AionrsModelSelection } from './useAionrsModelSelection';
+import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
+import { detectModelContextLimit } from '@/common/utils/modelCapabilities';
+import AionrsModelSelector from './AionrsModelSelector';
+import type { AcpDerivedOption } from '@/renderer/hooks/agent/useAcpConfigOptions';
 
 const configErrorMessageKey = (error: unknown) => {
   const errorKind = classifyConfigSetError(error);
@@ -119,11 +123,22 @@ const useSendBoxDraft = (conversation_id: string) => {
 const AionrsSendBox: React.FC<{
   conversation_id: string;
   modelSelection: AionrsModelSelection;
+  thoughtLevel?: AcpDerivedOption | null;
+  onSetThoughtLevel?: (optionId: string, value: string) => Promise<unknown>;
   session_mode?: string;
   agent_name?: string;
   teamSendMessage?: (payload: { input: string; files: ChatFileRef[] }) => Promise<void>;
   teamRuntime?: TeamSendBoxRuntime;
-}> = ({ conversation_id, modelSelection, session_mode, agent_name, teamSendMessage, teamRuntime }) => {
+}> = ({
+  conversation_id,
+  modelSelection,
+  thoughtLevel,
+  onSetThoughtLevel,
+  session_mode,
+  agent_name,
+  teamSendMessage,
+  teamRuntime,
+}) => {
   const [dynamicModes, setDynamicModes] = useState<AgentModeOption[]>([]);
   const [currentMode, setCurrentMode] = useState<string | undefined>(session_mode);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
@@ -144,17 +159,25 @@ const AionrsSendBox: React.FC<{
   const teamPermission = useTeamPermission();
   const propagateMode = teamPermission?.propagateMode;
 
-  const { thought, running, turnStartedAtMs, setActiveMsgId, setWaitingResponse, resetState } = useAionrsMessage(
-    conversation_id,
-    {
-      onConfigChanged: (capabilities) => {
-        const modes = (capabilities as { modes?: string[] })?.modes;
-        if (modes && modes.length > 0) {
-          setDynamicModes(modeOptionsFromCapabilities(modes));
-        }
-      },
-    }
-  );
+  const effectiveContextLimit = useMemo(() => {
+    if (!current_model?.use_model) return 0;
+    const customLimit = current_model.model_settings?.[current_model.use_model]?.context_limit;
+    if (typeof customLimit === 'number' && customLimit > 0) return customLimit;
+    return detectModelContextLimit(current_model.use_model);
+  }, [current_model]);
+
+  const { thought, running, turnStartedAtMs, setActiveMsgId, setWaitingResponse, resetState, tokenUsage } =
+    useAionrsMessage(
+      conversation_id,
+      {
+        onConfigChanged: (capabilities) => {
+          const modes = (capabilities as { modes?: string[] })?.modes;
+          if (modes && modes.length > 0) {
+            setDynamicModes(modeOptionsFromCapabilities(modes));
+          }
+        },
+      }
+    );
   const runtimeView = useConversationRuntimeView(conversation_id);
   const { markSendStarted, markSendAccepted, markSendFailed } = runtimeView;
 
@@ -803,6 +826,13 @@ const AionrsSendBox: React.FC<{
         }
         rightTools={
           <div className='flex items-center gap-8px min-w-0'>
+            {!isMobile && (
+              <AionrsModelSelector
+                selection={modelSelection}
+                thoughtLevel={thoughtLevel}
+                onSetThoughtLevel={onSetThoughtLevel}
+              />
+            )}
             <AgentModeSelector
               backend='aionrs'
               conversation_id={conversation_id}
@@ -876,17 +906,25 @@ const AionrsSendBox: React.FC<{
         }
         allowSendWhileLoading
         sendButtonPrefix={
-          teamRuntime?.onInterruptSend && content.trim() ? (
-            <Button
-              size='mini'
-              type='secondary'
-              icon={<Lightning />}
-              loading={interrupting}
-              onClick={() => void handleInterruptSend()}
-            >
-              {t('team.interruptAndSend')}
-            </Button>
-          ) : undefined
+          <>
+            {teamRuntime?.onInterruptSend && content.trim() ? (
+              <Button
+                size='mini'
+                type='secondary'
+                icon={<Lightning />}
+                loading={interrupting}
+                onClick={() => void handleInterruptSend()}
+              >
+                {t('team.interruptAndSend')}
+              </Button>
+            ) : undefined}
+            {tokenUsage ? (
+              <ContextUsageIndicator
+                tokenUsage={tokenUsage}
+                context_limit={effectiveContextLimit}
+              />
+            ) : undefined}
+          </>
         }
       />
       {isMobile && (

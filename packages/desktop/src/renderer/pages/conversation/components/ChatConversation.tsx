@@ -209,14 +209,6 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
     headerExtra: (
       <div className='flex items-center gap-8px'>
         <CronJobManager conversation_id={conversation.id} cron_job_id={cronJobId} />
-        {!isMobile && (
-          <AionrsModelSelector
-            selection={modelSelection}
-            thoughtLevel={runtimeConfig.thoughtLevel}
-            setStatus={runtimeConfig.setStatus}
-            onSetThoughtLevel={handleThoughtLevelSetOption}
-          />
-        )}
       </div>
     ),
     workspaceEnabled,
@@ -250,6 +242,8 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
         workspace={conversation.extra.workspace}
         emptySlot={emptySlot}
         modelSelection={modelSelection}
+        thoughtLevel={runtimeConfig.thoughtLevel}
+        onSetThoughtLevel={handleThoughtLevelSetOption}
         session_mode={conversation.extra?.session_mode}
         cron_job_id={cronJobId}
         loadedSkills={(conversation.extra as { skills?: string[] } | undefined)?.skills}
@@ -412,7 +406,6 @@ const ChatConversation: React.FC<{
           <CronJobManager conversation_id={conversation.id} cron_job_id={cronJobId} />
         </div>
       )}
-      {modelSelector && <div className='shrink-0'>{modelSelector}</div>}
       {conversation && conversation.type === 'acp' && !isMobile && !isLegacyReadOnlyConversation && (
         <div className='shrink-0'>
           <AcpRuntimeRestartButton

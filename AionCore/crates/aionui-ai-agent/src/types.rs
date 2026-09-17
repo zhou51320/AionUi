@@ -167,6 +167,8 @@ pub struct AionrsResolvedConfig {
     pub prompt_dump_dir: Option<PathBuf>,
     /// Model context limit override for context window management & compression.
     pub context_limit: Option<usize>,
+    /// Reasoning effort or thought level (off, low, medium, high).
+    pub thought_level: Option<String>,
 }
 
 #[cfg(test)]

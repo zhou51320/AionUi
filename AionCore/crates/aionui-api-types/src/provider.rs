@@ -56,6 +56,8 @@ pub struct ModelSettings {
     pub openai_api_mode: Option<ModelOpenAiApiMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_limit: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thought_level: Option<String>,
 }
 
 /// Health status values for a model.

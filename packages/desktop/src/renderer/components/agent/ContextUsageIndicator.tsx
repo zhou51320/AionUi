@@ -5,20 +5,26 @@
  */
 
 import { Popover } from '@arco-design/web-react';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { TokenUsageCost, TokenUsageData } from '@/common/config/storage';
 import { formatCurrency, formatNumber } from '@/renderer/services/i18n/format';
 
+export interface ContextCacheStats {
+  block_count?: number;
+  original_total_size?: number;
+  compressed_total_size?: number;
+  saved_size?: number;
+}
+
 interface ContextUsageIndicatorProps {
   tokenUsage: TokenUsageData | null;
   /**
-   * Agent-reported context window size. Without it (<= 0) the ring stays a
-   * hollow track and the popover shows the raw token count instead of a
-   * percentage — never a percentage against a guessed denominator.
+   * Agent-reported context window size.
    */
   context_limit: number;
+  cacheStats?: ContextCacheStats | null;
   className?: string;
   size?: number;
 }
@@ -26,22 +32,24 @@ interface ContextUsageIndicatorProps {
 const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
   tokenUsage,
   context_limit,
+  cacheStats,
   className = '',
   size = 20,
 }) => {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const [pinned, setPinned] = useState(false);
+  const [popoverVisible, setPopoverVisible] = useState(false);
 
   const hasWindow = context_limit > 0;
 
-  const { percentage, displayTotal, displayLimit, isWarning, isDanger } = useMemo(() => {
+  const { percentage, displayTotal, displayLimit, tierColor } = useMemo(() => {
     if (!tokenUsage) {
       return {
         percentage: 0,
         displayTotal: '0',
         displayLimit: '0',
-        isWarning: false,
-        isDanger: false,
+        tierColor: '#3B82F6',
       };
     }
 
@@ -51,19 +59,23 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
         percentage: 0,
         displayTotal: formatTokenCount(total, locale),
         displayLimit: '0',
-        isWarning: false,
-        isDanger: false,
+        tierColor: '#3B82F6',
       };
     }
 
     const pct = (total / context_limit) * 100;
+    let color = '#3B82F6';
+    if (pct >= 95) {
+      color = '#EF4444';
+    } else if (pct >= 80) {
+      color = '#F59E0B';
+    }
 
     return {
       percentage: pct,
       displayTotal: formatTokenCount(total, locale),
       displayLimit: formatTokenCount(context_limit, locale, true),
-      isWarning: pct > 70,
-      isDanger: pct > 90,
+      tierColor: color,
     };
   }, [tokenUsage, context_limit, hasWindow, locale]);
 
@@ -71,121 +83,199 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
     return null;
   }
 
-  // 计算圆环参数
+  // Ring geometry: 20x20 outer box, 16px circle diameter (radius 8), 2px stroke
   const strokeWidth = 2;
-  const radius = (size - strokeWidth) / 2;
+  const radius = 8;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+  const clampedPercentage = Math.min(100, Math.max(0, percentage));
+  const strokeDashoffset = circumference - (clampedPercentage / 100) * circumference;
 
-  // 根据状态获取颜色
-  const getStrokeColor = () => {
-    if (isDanger) return 'rgb(var(--danger-6))';
-    if (isWarning) return 'rgb(var(--warning-6))';
-    return 'rgb(var(--primary-6))';
-  };
-
-  // 背景圆环颜色 - 适配深浅主题
-  const getTrackColor = () => {
-    return 'var(--color-fill-3)';
-  };
+  // Center text (9px, max 99% to avoid overflow)
+  const centerText = useMemo(() => {
+    if (!hasWindow) return '•';
+    if (percentage >= 99.5) return '99%';
+    if (percentage > 0 && percentage < 1) return '<1%';
+    return `${Math.round(percentage)}%`;
+  }, [hasWindow, percentage]);
 
   const breakdown = tokenUsage.breakdown;
-  const breakdownParts: string[] = [];
-  if (breakdown) {
-    if (typeof breakdown.input_tokens === 'number') {
-      breakdownParts.push(
-        `${t('conversation.contextUsage.input', 'Input')} ${formatTokenCount(breakdown.input_tokens, locale)}`
-      );
-    }
-    if (typeof breakdown.output_tokens === 'number') {
-      breakdownParts.push(
-        `${t('conversation.contextUsage.output', 'Output')} ${formatTokenCount(breakdown.output_tokens, locale)}`
-      );
-    }
-    if (breakdown.cached_read_tokens) {
-      breakdownParts.push(
-        `${t('conversation.contextUsage.cachedRead', 'Cache read')} ${formatTokenCount(breakdown.cached_read_tokens, locale)}`
-      );
-    }
-    if (breakdown.cached_write_tokens) {
-      breakdownParts.push(
-        `${t('conversation.contextUsage.cachedWrite', 'Cache write')} ${formatTokenCount(breakdown.cached_write_tokens, locale)}`
-      );
-    }
-    if (breakdown.thought_tokens) {
-      breakdownParts.push(
-        `${t('conversation.contextUsage.thought', 'Thinking')} ${formatTokenCount(breakdown.thought_tokens, locale)}`
-      );
-    }
-  }
 
-  const details = (
-    <>
-      {tokenUsage.cost && (
-        <div className='text-12px text-t-secondary mt-4px'>
-          {t('conversation.contextUsage.sessionCost', 'Session cost')} ≈ {formatCostAmount(tokenUsage.cost, locale)}
+  // Layer 2: Expanded Card (ContextCard) - 280px wide
+  const popoverCard = (
+    <div
+      className='w-280px p-12px select-none text-12px'
+      style={{
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        borderRadius: 8,
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Section 1: Context Window */}
+      <div className='mb-8px'>
+        <div className='flex items-center justify-between'>
+          <span className='text-12px font-medium text-t-secondary'>
+            {t('conversation.contextUsage.contextWindow', '上下文窗口')}
+          </span>
+          <span className='text-13px font-bold' style={{ color: tierColor }}>
+            {hasWindow ? `${percentage.toFixed(1)}%` : t('conversation.contextUsage.unknown', '未知')}
+          </span>
         </div>
-      )}
-      {breakdownParts.length > 0 && (
-        <div className='text-12px text-t-secondary mt-4px'>{breakdownParts.join(' · ')}</div>
-      )}
-    </>
-  );
 
-  // Percentages are only honest against an agent-reported window size —
-  // never substitute a hardcoded per-model default here. Without a window
-  // the popover reports the raw count and says the window is unknown.
-  const popoverContent = hasWindow ? (
-    <div className='p-8px min-w-160px'>
-      <div className='text-14px font-medium text-t-primary'>
-        {formatPercentage(percentage, locale)} · {displayTotal} / {displayLimit}{' '}
-        {t('conversation.contextUsage.contextUsed', 'context used')}
+        {hasWindow && (
+          <div className='w-full h-4px bg-fill-2 rounded-full overflow-hidden my-6px'>
+            <div
+              className='h-full rounded-full transition-all duration-300'
+              style={{
+                width: `${clampedPercentage}%`,
+                backgroundColor: tierColor,
+              }}
+            />
+          </div>
+        )}
+
+        <div className='flex items-center justify-between text-11px text-t-secondary mt-4px'>
+          <span>{t('conversation.contextUsage.usedAndLimit', '已用 / 上限')}</span>
+          <span className='font-medium text-t-primary'>
+            {hasWindow ? `${displayTotal} / ${displayLimit}` : displayTotal}
+          </span>
+        </div>
       </div>
-      {details}
-    </div>
-  ) : (
-    <div className='p-8px min-w-160px'>
-      <div className='text-14px font-medium text-t-primary'>
-        {t('conversation.contextUsage.tokensUsed', '{{tokens}} tokens used', { tokens: displayTotal })}
+
+      {/* Section 2: Token Usage */}
+      <div className='border-t border-border-2 pt-8px mb-8px'>
+        <div className='text-12px font-medium text-t-secondary mb-6px'>
+          {t('conversation.contextUsage.tokenUsage', 'Token 用量')}
+        </div>
+        <div className='space-y-4px text-11px'>
+          {breakdown?.input_tokens !== undefined && (
+            <div className='flex items-center justify-between'>
+              <span className='text-t-secondary'>{t('conversation.contextUsage.input', '输入')}</span>
+              <span className='text-t-primary font-medium'>{formatTokenCount(breakdown.input_tokens, locale)}</span>
+            </div>
+          )}
+          {breakdown?.output_tokens !== undefined && (
+            <div className='flex items-center justify-between'>
+              <span className='text-t-secondary'>{t('conversation.contextUsage.output', '输出')}</span>
+              <span className='text-t-primary font-medium'>{formatTokenCount(breakdown.output_tokens, locale)}</span>
+            </div>
+          )}
+          {breakdown?.cached_read_tokens !== undefined && breakdown.cached_read_tokens > 0 && (
+            <div className='flex items-center justify-between'>
+              <span className='text-t-secondary'>{t('conversation.contextUsage.cachedRead', '缓存读取')}</span>
+              <span className='text-t-primary font-medium'>{formatTokenCount(breakdown.cached_read_tokens, locale)}</span>
+            </div>
+          )}
+          {breakdown?.cached_write_tokens !== undefined && breakdown.cached_write_tokens > 0 && (
+            <div className='flex items-center justify-between'>
+              <span className='text-t-secondary'>{t('conversation.contextUsage.cachedWrite', '缓存写入')}</span>
+              <span className='text-t-primary font-medium'>{formatTokenCount(breakdown.cached_write_tokens, locale)}</span>
+            </div>
+          )}
+          {breakdown?.thought_tokens !== undefined && breakdown.thought_tokens > 0 && (
+            <div className='flex items-center justify-between'>
+              <span className='text-t-secondary'>{t('conversation.contextUsage.thought', '深度思考')}</span>
+              <span className='text-t-primary font-medium'>{formatTokenCount(breakdown.thought_tokens, locale)}</span>
+            </div>
+          )}
+          <div className='flex items-center justify-between pt-2px border-t border-border-1'>
+            <span className='text-t-primary font-semibold'>{t('conversation.contextUsage.total', '总计')}</span>
+            <span className='text-t-primary font-semibold'>{displayTotal}</span>
+          </div>
+        </div>
       </div>
-      <div className='text-12px text-t-secondary mt-4px'>
-        {t('conversation.contextUsage.windowUnknown', 'Context window size unknown')}
+
+      {/* Section 3: Compressed Cache & Session Cost */}
+      <div className='border-t border-border-2 pt-8px space-y-4px text-11px'>
+        <div className='flex items-center justify-between'>
+          <span className='text-t-secondary'>{t('conversation.contextUsage.compressedCache', '压缩缓存')}</span>
+          <span className='text-t-primary font-medium'>
+            {cacheStats && (cacheStats.block_count ?? 0) > 0
+              ? t('conversation.contextUsage.compressedStats', '{{count}} 块 / 节省 {{saved}}', {
+                  count: cacheStats.block_count,
+                  saved: formatTokenCount(Math.round((cacheStats.saved_size ?? 0) / 4), locale),
+                })
+              : t('conversation.contextUsage.noCompression', '暂无压缩')}
+          </span>
+        </div>
+
+        {tokenUsage.cost && (
+          <div className='flex items-center justify-between'>
+            <span className='text-t-secondary'>{t('conversation.contextUsage.sessionCost', '会话成本')}</span>
+            <span className='text-t-primary font-medium'>≈ {formatCostAmount(tokenUsage.cost, locale)}</span>
+          </div>
+        )}
       </div>
-      {details}
     </div>
   );
 
   return (
-    <Popover content={popoverContent} position='top' trigger='hover' className='context-usage-popover'>
+    <Popover
+      content={popoverCard}
+      position='top'
+      trigger={pinned ? 'click' : 'hover'}
+      popupVisible={popoverVisible}
+      mouseEnterDelay={300}
+      mouseLeaveDelay={200}
+      onVisibleChange={(visible) => {
+        if (!pinned) {
+          setPopoverVisible(visible);
+        }
+      }}
+      className='context-usage-popover'
+    >
       <div
-        className={`context-usage-indicator cursor-pointer flex items-center justify-center ${className}`}
-        style={{ width: 32, height: 32 }}
+        className={`context-usage-indicator cursor-pointer flex items-center justify-center select-none transition-transform hover:scale-105 active:scale-95 ${className}`}
+        style={{ width: size, height: size }}
+        title={t('conversation.contextUsage.title', '上下文占用情况 (点击固定)')}
+        onClick={(e) => {
+          e.stopPropagation();
+          const nextPinned = !pinned;
+          setPinned(nextPinned);
+          setPopoverVisible(nextPinned ? true : false);
+        }}
       >
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
-          {/* 背景圆环 */}
+        <svg width={size} height={size} viewBox='0 0 20 20' className='overflow-visible'>
+          {/* Background Ring */}
           <circle
-            cx={size / 2}
-            cy={size / 2}
+            cx={10}
+            cy={10}
             r={radius}
             fill='none'
-            stroke={getTrackColor()}
+            stroke='var(--color-fill-3, #E5E7EB)'
             strokeWidth={strokeWidth}
           />
-          {/* 进度圆环 — only when the denominator is known; otherwise the hollow track alone signals "count available, window unknown" */}
+          {/* Progress Ring (rotated -90deg starting from top) */}
           {hasWindow && (
             <circle
-              cx={size / 2}
-              cy={size / 2}
+              cx={10}
+              cy={10}
               r={radius}
               fill='none'
-              stroke={getStrokeColor()}
+              stroke={tierColor}
               strokeWidth={strokeWidth}
               strokeLinecap='round'
               strokeDasharray={circumference}
               strokeDashoffset={strokeDashoffset}
-              style={{ transition: 'stroke-dashoffset 0.3s ease, stroke 0.3s ease' }}
+              style={{
+                transformOrigin: '10px 10px',
+                transform: 'rotate(-90deg)',
+                transition: 'stroke-dashoffset 0.3s ease, stroke 0.3s ease',
+              }}
             />
           )}
+          {/* Center Percentage Label */}
+          <text
+            x={10}
+            y={10.5}
+            textAnchor='middle'
+            dominantBaseline='central'
+            fontSize='9'
+            fontWeight='600'
+            fill='var(--color-text-1, #374151)'
+            style={{ pointerEvents: 'none' }}
+          >
+            {centerText}
+          </text>
         </svg>
       </div>
     </Popover>

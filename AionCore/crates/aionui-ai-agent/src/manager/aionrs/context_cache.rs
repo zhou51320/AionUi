@@ -24,6 +24,33 @@ pub struct CacheEntry {
     pub original_content: String,
     pub preview: String,
     pub size: usize,
+    #[serde(default = "default_ref_count")]
+    pub ref_count: u32,
+    pub created_at: u64,
+    #[serde(default)]
+    pub last_accessed_at: u64,
+}
+
+fn default_ref_count() -> u32 {
+    1
+}
+
+/// Statistics for the context compression cache.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct CacheStats {
+    pub block_count: usize,
+    pub original_total_size: usize,
+    pub compressed_total_size: usize,
+    pub saved_size: usize,
+}
+
+/// Summary item for listing cached blocks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CacheBlockSummary {
+    pub hash: String,
+    pub preview: String,
+    pub size: usize,
+    pub ref_count: u32,
     pub created_at: u64,
 }
 
@@ -65,7 +92,7 @@ impl ContextCacheStore {
     }
 
     /// Computes short SHA-256 hash (first 16 hex chars) of content.
-    fn compute_hash(content: &str) -> String {
+    pub fn compute_hash(content: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.update(content.as_bytes());
         let full_hex = hex::encode(hasher.finalize());
@@ -73,7 +100,7 @@ impl ContextCacheStore {
     }
 
     /// Creates a human-readable preview of content.
-    fn make_preview(content: &str) -> String {
+    pub fn make_preview(content: &str) -> String {
         let lines: Vec<&str> = content.lines().collect();
         if lines.len() <= 10 {
             if content.len() > 600 {
@@ -88,6 +115,7 @@ impl ContextCacheStore {
     }
 
     /// Stores content in the cache and returns (hash, compressed_marker).
+    /// If content with the same hash already exists, ref_count is incremented idempotently.
     pub fn store(&self, content: &str) -> (String, String) {
         let hash = Self::compute_hash(content);
         let preview = Self::make_preview(content);
@@ -97,17 +125,23 @@ impl ContextCacheStore {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let entry = CacheEntry {
-            hash: hash.clone(),
-            original_content: content.to_string(),
-            preview: preview.clone(),
-            size,
-            created_at: now,
-        };
-
         {
             if let Ok(mut map) = self.entries.write() {
-                map.insert(hash.clone(), entry);
+                if let Some(existing) = map.get_mut(&hash) {
+                    existing.ref_count += 1;
+                    existing.last_accessed_at = now;
+                } else {
+                    let entry = CacheEntry {
+                        hash: hash.clone(),
+                        original_content: content.to_string(),
+                        preview: preview.clone(),
+                        size,
+                        ref_count: 1,
+                        created_at: now,
+                        last_accessed_at: now,
+                    };
+                    map.insert(hash.clone(), entry);
+                }
             }
         }
 
@@ -128,6 +162,55 @@ impl ContextCacheStore {
             .and_then(|map| map.get(hash).map(|e| e.original_content.clone()))
     }
 
+    /// Returns cache statistics: block count, original size, compressed size, and saved size.
+    pub fn stats(&self) -> CacheStats {
+        let map = match self.entries.read() {
+            Ok(guard) => guard,
+            Err(_) => return CacheStats::default(),
+        };
+
+        let block_count = map.len();
+        let mut original_total_size = 0;
+        let mut compressed_total_size = 0;
+
+        for entry in map.values() {
+            original_total_size += entry.size * (entry.ref_count as usize);
+            // Marker overhead is ~160 chars + preview length
+            let marker_size = entry.preview.len() + 160;
+            compressed_total_size += marker_size * (entry.ref_count as usize);
+        }
+
+        let saved_size = original_total_size.saturating_sub(compressed_total_size);
+
+        CacheStats {
+            block_count,
+            original_total_size,
+            compressed_total_size,
+            saved_size,
+        }
+    }
+
+    /// Lists summaries of all cached blocks sorted by creation time descending.
+    pub fn list_blocks(&self) -> Vec<CacheBlockSummary> {
+        let map = match self.entries.read() {
+            Ok(guard) => guard,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut list: Vec<CacheBlockSummary> = map
+            .values()
+            .map(|e| CacheBlockSummary {
+                hash: e.hash.clone(),
+                preview: e.preview.clone(),
+                size: e.size,
+                ref_count: e.ref_count,
+                created_at: e.created_at,
+            })
+            .collect();
+        list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        list
+    }
+
     /// Compresses large ToolResult content blocks in-place into the lossless cache.
     pub fn compress_content_blocks(&self, blocks: &mut [ContentBlock], threshold: usize) -> usize {
         let mut compressed_count = 0;
@@ -141,6 +224,37 @@ impl ContextCacheStore {
             }
         }
         compressed_count
+    }
+
+    /// Checks whether estimated tokens exceed 85% of the model context limit.
+    pub fn should_compress_at_85_percent(current_tokens: usize, context_limit: usize) -> bool {
+        if context_limit == 0 {
+            return false;
+        }
+        current_tokens >= (context_limit * 85) / 100
+    }
+
+    /// Dynamic compression that applies context window awareness.
+    /// When current tokens reach 85% of context window limit, triggers aggressive compression (> 1024 chars).
+    /// Under 85%, compresses blocks larger than 8192 chars to save headroom.
+    pub fn compress_content_blocks_dynamic(
+        &self,
+        blocks: &mut [ContentBlock],
+        current_tokens: usize,
+        context_limit: Option<usize>,
+    ) -> usize {
+        let threshold = match context_limit {
+            Some(limit) if limit > 0 => {
+                if Self::should_compress_at_85_percent(current_tokens, limit) {
+                    1024
+                } else {
+                    8192
+                }
+            }
+            _ => DEFAULT_COMPRESSION_THRESHOLD,
+        };
+
+        self.compress_content_blocks(blocks, threshold)
     }
 
     /// Flushes cache to disk.
@@ -234,5 +348,46 @@ mod tests {
             panic!("Expected ToolResult");
         }
     }
+
+    #[test]
+    fn test_duplicate_hash_idempotent_ref_count() {
+        let dir = tempdir().unwrap();
+        let cache_file = dir.path().join("aion_cache.json");
+        let store = ContextCacheStore::new(&cache_file);
+
+        let content = "Repeated content block for test";
+        let (hash1, _) = store.store(content);
+        let (hash2, _) = store.store(content);
+
+        assert_eq!(hash1, hash2);
+
+        let blocks = store.list_blocks();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].ref_count, 2);
+    }
+
+    #[test]
+    fn test_stats_calculation() {
+        let dir = tempdir().unwrap();
+        let cache_file = dir.path().join("aion_cache.json");
+        let store = ContextCacheStore::new(&cache_file);
+
+        let long_content = "X".repeat(5000);
+        store.store(&long_content);
+
+        let stats = store.stats();
+        assert_eq!(stats.block_count, 1);
+        assert_eq!(stats.original_total_size, 5000);
+        assert!(stats.saved_size > 4000);
+    }
+
+    #[test]
+    fn test_85_percent_threshold_trigger() {
+        assert!(!ContextCacheStore::should_compress_at_85_percent(80_000, 100_000));
+        assert!(ContextCacheStore::should_compress_at_85_percent(85_000, 100_000));
+        assert!(ContextCacheStore::should_compress_at_85_percent(90_000, 100_000));
+        assert!(!ContextCacheStore::should_compress_at_85_percent(90_000, 0));
+    }
 }
+
 

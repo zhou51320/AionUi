@@ -24,6 +24,7 @@ import { usePendingConfirmationsRecovery } from '@renderer/pages/conversation/Me
 import HOC from '@renderer/utils/ui/HOC';
 import React, { useMemo } from 'react';
 import type { TeamSendBoxRuntime } from '@/renderer/pages/team/components/teamSendRuntime';
+import type { AcpDerivedOption } from '@/renderer/hooks/agent/useAcpConfigOptions';
 import AionrsSendBox from './AionrsSendBox';
 import type { AionrsModelSelection } from './useAionrsModelSelection';
 
@@ -31,6 +32,8 @@ const AionrsChat: React.FC<{
   conversation_id: string;
   workspace: string;
   modelSelection: AionrsModelSelection;
+  thoughtLevel?: AcpDerivedOption | null;
+  onSetThoughtLevel?: (optionId: string, value: string) => Promise<unknown>;
   session_mode?: string;
   cron_job_id?: string;
   emptySlot?: React.ReactNode;
@@ -46,6 +49,8 @@ const AionrsChat: React.FC<{
   conversation_id,
   workspace,
   modelSelection,
+  thoughtLevel,
+  onSetThoughtLevel,
   session_mode,
   cron_job_id,
   emptySlot,
@@ -95,6 +100,8 @@ const AionrsChat: React.FC<{
           <AionrsSendBox
             conversation_id={conversation_id}
             modelSelection={modelSelection}
+            thoughtLevel={thoughtLevel}
+            onSetThoughtLevel={onSetThoughtLevel}
             session_mode={session_mode}
             agent_name={agent_name}
             teamSendMessage={teamSendMessage}

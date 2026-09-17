@@ -41,38 +41,53 @@ if (-not $TargetBinary -or -not (Test-Path $TargetBinary)) {
 
 Write-Host "Checking target binary: $TargetBinary" -ForegroundColor Cyan
 
-# 1. Check with dumpbin if available
+# Auto-locate dumpbin from Visual Studio if not in PATH
 $Dumpbin = Get-Command "dumpbin.exe" -ErrorAction SilentlyContinue
+if (-not $Dumpbin) {
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path $vswhere) {
+        $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if ($vsPath) {
+            $dumpbinItem = Get-ChildItem -Path "$vsPath\VC\Tools\MSVC" -Filter "dumpbin.exe" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match "Hostx64\\x64" } | Select-Object -First 1
+            if ($dumpbinItem) {
+                $env:PATH = "$($dumpbinItem.DirectoryName);$env:PATH"
+                $Dumpbin = Get-Command "dumpbin.exe" -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
 if ($Dumpbin) {
     Write-Host "Running dumpbin header check..." -ForegroundColor Green
     & dumpbin /headers $TargetBinary | Select-String "subsystem version"
 
-    Write-Host "Checking for prohibited Win10+ imports (ProcessPrng, bcryptprimitives, winrt)..." -ForegroundColor Green
-    $Forbidden = & dumpbin /dependents $TargetBinary | Select-String "ProcessPrng|bcryptprimitives|winrt"
-    if ($Forbidden) {
-        Write-Host "WARNING: Found potentially incompatible symbols:" -ForegroundColor Red
-        $Forbidden | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    Write-Host "Checking PE import table for prohibited Win10+ imports (bcryptprimitives.dll, api-ms-win-core-winrt)..." -ForegroundColor Green
+    $ForbiddenImports = & dumpbin /imports $TargetBinary | Select-String -Pattern "bcryptprimitives\.dll|api-ms-win-core-winrt|ProcessPrng"
+    if ($ForbiddenImports) {
+        Write-Host "WARNING: Found potentially incompatible imported symbols:" -ForegroundColor Red
+        $ForbiddenImports | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
         exit 1
     } else {
-        Write-Host "PASS: No forbidden Win10+ symbols detected!" -ForegroundColor Green
+        Write-Host "PASS: No forbidden Win10+ symbols detected in PE import table!" -ForegroundColor Green
     }
 } else {
-    Write-Host "dumpbin.exe not in PATH. Performing binary string scan..." -ForegroundColor Yellow
-    $Content = [System.IO.File]::ReadAllText($TargetBinary, [System.Text.Encoding]::ASCII)
-    $IncompatibleSymbols = @("ProcessPrng", "bcryptprimitives.dll", "api-ms-win-core-winrt")
-    $FoundAny = $false
-
-    foreach ($sym in $IncompatibleSymbols) {
-        if ($Content.Contains($sym)) {
-            Write-Host "WARNING: Symbol '$sym' found in binary!" -ForegroundColor Red
-            $FoundAny = $true
+    Write-Host "dumpbin.exe not available. Reading PE header directly..." -ForegroundColor Yellow
+    $bytes = [System.IO.File]::ReadAllBytes($TargetBinary)
+    # e_lfanew at 0x3C
+    $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+    # Check PE signature 'PE\0\0'
+    if ($bytes[$peOffset] -eq 0x50 -and $bytes[$peOffset+1] -eq 0x45) {
+        # Magic at peOffset + 24: 0x20B = PE32+ (64-bit)
+        $magic = [BitConverter]::ToUInt16($bytes, $peOffset + 24)
+        $subsystemOffset = if ($magic -eq 0x20B) { $peOffset + 24 + 44 } else { $peOffset + 24 + 44 }
+        $majorSubsystem = [BitConverter]::ToUInt16($bytes, $subsystemOffset)
+        $minorSubsystem = [BitConverter]::ToUInt16($bytes, $subsystemOffset + 2)
+        Write-Host "PE Subsystem Version: $majorSubsystem.$minorSubsystem" -ForegroundColor Green
+        if ($majorSubsystem -gt 6 -or ($majorSubsystem -eq 6 -and $minorSubsystem -gt 1)) {
+            Write-Host "WARNING: Subsystem version $majorSubsystem.$minorSubsystem exceeds Windows 7 (6.1)!" -ForegroundColor Red
+            exit 1
         }
-    }
-
-    if ($FoundAny) {
-        Write-Host "FAIL: Incompatible Windows 10+ symbols found in binary." -ForegroundColor Red
-        exit 1
-    } else {
-        Write-Host "PASS: No Windows 10+ symbols detected in binary string scan." -ForegroundColor Green
+        Write-Host "PASS: Subsystem version is compatible with Windows 7." -ForegroundColor Green
     }
 }
+

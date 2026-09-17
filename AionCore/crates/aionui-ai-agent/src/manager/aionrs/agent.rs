@@ -38,7 +38,7 @@ use crate::protocol::send_error::AgentSendError;
 use crate::types::{AionrsResolvedConfig, SendMessageData};
 
 use super::content::build_content_blocks;
-use super::context_cache::{ContextCacheStore, DEFAULT_COMPRESSION_THRESHOLD};
+use super::context_cache::ContextCacheStore;
 use super::error::{aionrs_engine_error_to_send_error, aionrs_runtime_error_summary};
 
 fn resolve_aionui_config(cli_args: &CliArgs) -> Result<Config, AgentError> {
@@ -127,6 +127,10 @@ pub struct AionrsAgentManager {
     turn_finished_notify: Arc<Notify>,
     /// Windows 7-compatible lossless context compression & retrieval store.
     context_cache: Arc<ContextCacheStore>,
+    /// Configured or auto-detected model context limit.
+    context_limit: Option<usize>,
+    /// Configured thought level / reasoning effort.
+    thought_level: Option<String>,
 }
 
 impl Drop for AionrsAgentManager {
@@ -180,6 +184,15 @@ impl AionrsAgentManager {
                 runtime_env: config_extra.runtime_env.clone(),
             });
 
+        let (thinking, thinking_budget) = match config_extra.thought_level.as_deref() {
+            Some("off") => (Some("false".to_string()), Some(0)),
+            Some("low") => (Some("low".to_string()), Some(2048)),
+            Some("medium") => (Some("medium".to_string()), Some(8192)),
+            Some("high") => (Some("high".to_string()), Some(16384)),
+            Some(other) => (Some(other.to_string()), None),
+            None => (None, None),
+        };
+
         let cli_args = CliArgs {
             provider: Some(config_extra.provider.clone()),
             api_key: Some(config_extra.api_key.clone()),
@@ -192,8 +205,8 @@ impl AionrsAgentManager {
             system_prompt: config_extra.system_prompt.clone(),
             profile: None,
             auto_approve: config_extra.session_mode.as_deref() == Some("yolo"),
-            thinking: None,
-            thinking_budget: None,
+            thinking,
+            thinking_budget,
             project_dir: Some(PathBuf::from(&workspace)),
         };
 
@@ -305,6 +318,8 @@ impl AionrsAgentManager {
             cancel_notify: Arc::new(Notify::new()),
             turn_finished_notify: Arc::new(Notify::new()),
             context_cache,
+            context_limit: config_extra.context_limit,
+            thought_level: config_extra.thought_level,
         })
     }
 
@@ -422,11 +437,17 @@ impl IAgentTask for AionrsAgentManager {
             "Building structured Aionrs content blocks"
         );
         let mut content_blocks = build_content_blocks(&data.content, &data.files);
-        let compressed = self.context_cache.compress_content_blocks(&mut content_blocks, DEFAULT_COMPRESSION_THRESHOLD);
+        let estimated_tokens = data.content.len() / 4;
+        let compressed = self.context_cache.compress_content_blocks_dynamic(
+            &mut content_blocks,
+            estimated_tokens,
+            self.context_limit,
+        );
         if compressed > 0 {
             info!(
                 conversation_id = %self.runtime.conversation_id(),
                 compressed_count = compressed,
+                context_limit = ?self.context_limit,
                 "Losslessly cached large content blocks into local context store"
             );
         }
@@ -618,6 +639,18 @@ impl AionrsAgentManager {
         Ok(GetConfigOptionsResponse {
             config_options: vec![aionrs_mode_config_option(self.approval_manager.current_mode())],
         })
+    }
+
+    pub fn context_cache_stats(&self) -> super::context_cache::CacheStats {
+        self.context_cache.stats()
+    }
+
+    pub fn context_cache(&self) -> Arc<ContextCacheStore> {
+        Arc::clone(&self.context_cache)
+    }
+
+    pub fn thought_level(&self) -> Option<&str> {
+        self.thought_level.as_deref()
     }
 
     pub async fn set_config_option(&self, option_id: &str, value: &str) -> Result<SetConfigOptionResponse, AgentError> {

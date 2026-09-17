@@ -2,7 +2,9 @@ import type { IProvider } from '@/common/config/storage';
 import {
   type ModelImageInputChoice,
   type ModelOpenAiApiModeChoice,
+  type ModelThoughtLevelChoice,
   detectModelContextLimit,
+  detectModelThoughtSupport,
   supportsOpenAiApiMode,
   updateModelSettings,
 } from '@/common/utils/modelCapabilities';
@@ -26,6 +28,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     const [modelProtocol, setModelProtocol] = useState<string>('openai');
     const [imageInput, setImageInput] = useState<ModelImageInputChoice>('auto');
     const [openAiApiMode, setOpenAiApiMode] = useState<ModelOpenAiApiModeChoice>('auto');
+    const [thoughtLevel, setThoughtLevel] = useState<ModelThoughtLevelChoice>('auto');
     const [contextMode, setContextMode] = useState<'auto' | 'custom'>('auto');
     const [customContextLimit, setCustomContextLimit] = useState<number | undefined>(undefined);
     const isNewApi = isNewApiPlatform(data?.platform ?? '');
@@ -35,6 +38,9 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     const showOpenAiApiMode = supportsOpenAiApiMode(data?.platform ?? '', modelProtocol);
 
     const activeModelName = editingModel || (models.length > 0 ? models[models.length - 1] : '');
+    const isReasoningCapable = useMemo(() => {
+      return activeModelName ? detectModelThoughtSupport(activeModelName) : false;
+    }, [activeModelName]);
     const detectedContextLimit = useMemo(() => {
       return activeModelName ? detectModelContextLimit(activeModelName) : 128000;
     }, [activeModelName]);
@@ -55,6 +61,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       const settings = editingModel ? data?.model_settings?.[editingModel] : undefined;
       setImageInput(settings?.image_input ?? 'auto');
       setOpenAiApiMode(settings?.openai_api_mode ?? 'auto');
+      setThoughtLevel(settings?.thought_level ?? 'auto');
       setModelProtocol(editingModel ? (data?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
 
       if (settings?.context_limit && settings.context_limit > 0) {
@@ -79,7 +86,8 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
           targetModels,
           imageInput,
           showOpenAiApiMode ? openAiApiMode : 'auto',
-          effectiveContextLimit
+          effectiveContextLimit,
+          thoughtLevel
         ),
       };
 
@@ -226,6 +234,28 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
               <div className='text-11px text-t-secondary leading-4'>{t('settings.openAiApiModeTip')}</div>
             </div>
           )}
+
+          <div className='space-y-8px'>
+            <div className='text-13px font-500 text-t-secondary'>
+              {t('settings.thoughtLevel', '推理强度 / 思考模式 (Reasoning Effort)')}
+            </div>
+            <Select
+              value={thoughtLevel}
+              onChange={(value) => setThoughtLevel(value as ModelThoughtLevelChoice)}
+              options={[
+                { label: t('settings.modelSettingAuto', '自动 (Auto)'), value: 'auto' },
+                { label: t('agent.thoughtLevel.off', '关闭 (Off)'), value: 'off' },
+                { label: t('agent.thoughtLevel.low', '低强度 (Low)'), value: 'low' },
+                { label: t('agent.thoughtLevel.medium', '中强度 (Medium)'), value: 'medium' },
+                { label: t('agent.thoughtLevel.high', '高强度 (High)'), value: 'high' },
+              ]}
+            />
+            <div className='text-11px text-t-secondary leading-4'>
+              {isReasoningCapable
+                ? t('settings.thoughtLevelSupportedTip', '该模型支持深度推理，可针对此模型指定默认思考强度。')
+                : t('settings.thoughtLevelGeneralTip', '仅适用于支持思考/推理的模型 (如 o1/o3/DeepSeek-R1 等)。若设为自动则使用提供商默认配置。')}
+            </div>
+          </div>
 
           {!isEditing && models.length > 1 && (
             <div className='text-11px text-t-secondary leading-4'>{t('settings.modelSettingsApplyToSelected')}</div>

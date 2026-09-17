@@ -106,6 +106,7 @@ impl ProviderHealthCheckService {
             runtime_env: Vec::new(),
             prompt_dump_dir: None,
             context_limit: None,
+            thought_level: None,
         })
     }
 }

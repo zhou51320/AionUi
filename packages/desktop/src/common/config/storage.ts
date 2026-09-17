@@ -513,10 +513,13 @@ export type ModelOpenAiApiMode = 'chat_completions' | 'responses';
 
 export type ModelImageInputCapability = 'supported' | 'unsupported';
 
+export type ModelThoughtLevel = 'off' | 'low' | 'medium' | 'high' | 'auto';
+
 export type ModelSettings = {
   image_input?: ModelImageInputCapability;
   openai_api_mode?: ModelOpenAiApiMode;
   context_limit?: number;
+  thought_level?: ModelThoughtLevel;
 };
 
 export interface IProvider {

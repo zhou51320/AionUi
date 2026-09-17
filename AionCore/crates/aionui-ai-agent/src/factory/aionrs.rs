@@ -184,7 +184,13 @@ pub(super) async fn build(
 
     let context_limit = model_overrides
         .context_limit
+        .or_else(|| overrides.context_limit)
         .or_else(|| row.context_limit.map(|v| v as usize));
+
+    let thought_level = overrides
+        .thought_level
+        .clone()
+        .or_else(|| model_overrides.thought_level.clone());
 
     let config = AionrsResolvedConfig {
         provider,
@@ -205,6 +211,7 @@ pub(super) async fn build(
         runtime_env: ctx.runtime_env,
         prompt_dump_dir: crate::dev_prompt_dump::dump_dir_for_data_dir(&deps.data_dir, deps.dump_prompts),
         context_limit,
+        thought_level,
     };
 
     if let Some(system_prompt) = config.system_prompt.as_deref()
@@ -491,11 +498,12 @@ fn rewrite_openai_api_url(url: &str, mode: OpenAiApiMode) -> Option<String> {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct ModelCompatOverrides {
     pub(crate) image_input: Option<ImageInputCapability>,
     pub(crate) openai_api_mode: Option<OpenAiApiMode>,
     pub(crate) context_limit: Option<usize>,
+    pub(crate) thought_level: Option<String>,
 }
 
 pub(crate) fn resolve_model_compat_overrides(
@@ -519,6 +527,7 @@ pub(crate) fn resolve_model_compat_overrides(
             ModelOpenAiApiMode::Responses => OpenAiApiMode::Responses,
         }),
         context_limit: settings.context_limit,
+        thought_level: settings.thought_level.clone(),
     })
 }
 

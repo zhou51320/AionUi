@@ -128,6 +128,10 @@ pub struct AionrsBuildExtra {
     pub backend: Option<String>,
     #[serde(default)]
     pub user_id: Option<String>,
+    #[serde(default)]
+    pub thought_level: Option<String>,
+    #[serde(default)]
+    pub context_limit: Option<usize>,
     /// Present only on a forked conversation (see [`ForkSpec`]). Consumed by
     /// the aionrs factory on first open when no session exists for this
     /// conversation yet: the parent's session (keyed by

@@ -54,6 +54,9 @@ jobs:
             -Zbuild-std=std,panic_abort \
             -p aionui-app
 
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Verify Windows 7 PE Compatibility
         shell: powershell
         run: |

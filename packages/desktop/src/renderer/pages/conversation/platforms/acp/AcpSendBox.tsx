@@ -4,6 +4,7 @@ import { isBackendHttpError } from '@/common/adapter/httpBridge';
 import { isSideQuestionSupported } from '@/common/chat/sideQuestion';
 import { parseError, uuid } from '@/common/utils';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
+import AcpModelSelector from '@/renderer/components/agent/AcpModelSelector';
 import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
 import CommandQueuePanel from '@/renderer/components/chat/CommandQueuePanel';
 import MobileActionSheet, {
@@ -850,6 +851,13 @@ Please check your local CLI tool authentication status`,
         }
         rightTools={
           <div className='flex items-center gap-8px min-w-0'>
+            {!isMobile && (
+              <AcpModelSelector
+                conversation_id={conversation_id}
+                backend={backend}
+                waitForWarmup
+              />
+            )}
             {showModeSelector && (
               <AgentModeSelector
                 backend={backend}
