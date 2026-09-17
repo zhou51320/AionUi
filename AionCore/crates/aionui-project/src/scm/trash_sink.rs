@@ -32,18 +32,45 @@ pub(super) struct PlatformTrash;
 
 #[cfg(target_os = "windows")]
 fn trash_delete(path: &Path) -> Result<(), String> {
-    match trash::delete(path) {
-        Ok(()) => Ok(()),
-        Err(err) => {
-            tracing::warn!(
-                "Platform trash failed ({}), falling back to std::fs removal for Win7 compatibility",
-                err
-            );
-            if path.is_dir() {
-                std::fs::remove_dir_all(path).map_err(|e| e.to_string())
-            } else {
-                std::fs::remove_file(path).map_err(|e| e.to_string())
-            }
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::{
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT,
+        FO_DELETE, SHFILEOPSTRUCTW,
+    };
+
+    let full_path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let path_str = full_path.as_os_str();
+    let mut wide_chars: Vec<u16> = path_str.encode_wide().collect();
+    // Strip verbatim disk prefix \\?\ if present as SHFileOperation doesn't handle it
+    if wide_chars.len() >= 4 && wide_chars[0] == b'\\' as u16 && wide_chars[1] == b'\\' as u16 && wide_chars[2] == b'?' as u16 && wide_chars[3] == b'\\' as u16 {
+        wide_chars.drain(0..4);
+    }
+    wide_chars.push(0);
+    wide_chars.push(0);
+
+    let mut file_op = SHFILEOPSTRUCTW {
+        hwnd: std::ptr::null_mut(),
+        wFunc: FO_DELETE,
+        pFrom: wide_chars.as_ptr(),
+        pTo: std::ptr::null(),
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI) as u16,
+        fAnyOperationsAborted: 0,
+        hNameMappings: std::ptr::null_mut(),
+        lpszProgressTitle: std::ptr::null(),
+    };
+
+    let ret = unsafe { SHFileOperationW(&mut file_op) };
+    if ret == 0 && file_op.fAnyOperationsAborted == 0 {
+        Ok(())
+    } else {
+        tracing::warn!(
+            "SHFileOperationW failed (code {}), falling back to std::fs removal",
+            ret
+        );
+        if path.is_dir() {
+            std::fs::remove_dir_all(path).map_err(|e| e.to_string())
+        } else {
+            std::fs::remove_file(path).map_err(|e| e.to_string())
         }
     }
 }

@@ -6,4 +6,8 @@ git-fetch-with-cli = true
 [target.x86_64-win7-windows-msvc]
 rustflags = [
     "-C", "target-feature=+crt-static",
+    "-C", "link-arg=/DELAYLOAD:api-ms-win-core-winrt-l1-1-0.dll",
+    "-C", "link-arg=/DELAYLOAD:api-ms-win-core-winrt-string-l1-1-0.dll",
+    "-C", "link-arg=/DELAYLOAD:api-ms-win-core-winrt-error-l1-1-0.dll",
+    "-C", "link-arg=delayimp.lib",
 ]

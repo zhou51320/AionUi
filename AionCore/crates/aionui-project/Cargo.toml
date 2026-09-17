@@ -26,7 +26,12 @@ ignore.workspace = true
 # Source control: in-process git (no external binary, headless/cross-platform),
 # plus platform trash for discarding untracked files non-destructively.
 git2.workspace = true
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
 trash.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_UI_Shell", "Win32_Foundation"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

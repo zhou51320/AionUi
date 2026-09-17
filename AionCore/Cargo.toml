@@ -224,3 +224,6 @@ debug = "line-tables-only"
 split-debuginfo = "unpacked"
 incremental = false
 
+
+[patch.crates-io]
+iana-time-zone = { path = "crates/iana-time-zone" }
