@@ -61,8 +61,8 @@ if ($Dumpbin) {
     Write-Host "Running dumpbin header check..." -ForegroundColor Green
     & dumpbin /headers $TargetBinary | Select-String "subsystem version"
 
-    Write-Host "Checking PE import table for prohibited Win10+ imports (bcryptprimitives.dll, api-ms-win-core-winrt)..." -ForegroundColor Green
-    $ForbiddenImports = & dumpbin /imports $TargetBinary | Select-String -Pattern "bcryptprimitives\.dll|api-ms-win-core-winrt|ProcessPrng"
+    Write-Host "Checking PE import table for prohibited Win10+ imports (bcryptprimitives.dll, api-ms-win-core-winrt, combase.dll)..." -ForegroundColor Green
+    $ForbiddenImports = & dumpbin /imports $TargetBinary | Select-String -Pattern "bcryptprimitives\.dll|api-ms-win-core-winrt|ProcessPrng|combase\.dll"
     if ($ForbiddenImports) {
         Write-Host "WARNING: Found potentially incompatible imported symbols:" -ForegroundColor Red
         $ForbiddenImports | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
