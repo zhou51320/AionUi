@@ -1,11 +1,30 @@
 import os
 import sys
+
+# Ensure server base directory is in sys.path
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
-from models import db, User, UserConfig
-from api import auth_bp, config_bp, market_bp, log_bp
+from models import db, User, UserConfig, ModelTemplate, AppRelease
+from api import auth_bp, config_bp, market_bp, log_bp, update_bp
 from admin_views import init_admin
+
+# WTForms 3.2+ compatibility fix for Flask-Admin
+try:
+    from flask_admin.contrib.sqla.validators import Unique
+    Unique.field_flags = {'unique': True}
+except Exception:
+    pass
+
+try:
+    from flask_admin.form.validators import FieldListInputRequired
+    FieldListInputRequired.field_flags = {'required': True}
+except Exception:
+    pass
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -23,6 +42,7 @@ def create_app(config_class=Config):
     app.register_blueprint(config_bp)
     app.register_blueprint(market_bp)
     app.register_blueprint(log_bp)
+    app.register_blueprint(update_bp)
 
     @app.route('/')
     def root():
@@ -39,7 +59,18 @@ def create_app(config_class=Config):
 
     @app.errorhandler(500)
     def handle_500(e):
-        return jsonify({'code': 500, 'message': 'Internal server error', 'data': {}}), 500
+        import traceback
+        from flask import request
+        app.logger.error(f"Internal 500 Error: {e}\n{traceback.format_exc()}")
+        if request.path.startswith('/api/') or request.headers.get('Accept', '').startswith('application/json'):
+            return jsonify({'code': 500, 'message': f'Internal server error: {str(e)}', 'data': {}}), 500
+        return f"""
+        <div style="padding: 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; max-width: 600px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+            <h2 style="color: #ef4444; margin-bottom: 12px;">服务器内部错误 (500)</h2>
+            <p style="color: #64748b; margin-bottom: 20px;">{e}</p>
+            <a href="/admin" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">返回管理控制台</a>
+        </div>
+        """, 500
 
     return app
 
@@ -82,6 +113,13 @@ def init_database(app):
             )
             user_config.set_api_key('')
             db.session.add(user_config)
+
+        # Seed initial model templates if empty
+        from models import ModelTemplate
+        from admin_views import DEFAULT_MODEL_TEMPLATES
+        if ModelTemplate.query.count() == 0:
+            for d in DEFAULT_MODEL_TEMPLATES:
+                db.session.add(ModelTemplate(**d))
 
         db.session.commit()
         print('====================================================')

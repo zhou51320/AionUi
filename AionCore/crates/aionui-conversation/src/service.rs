@@ -2421,13 +2421,23 @@ impl ConversationService {
             .await?;
         }
 
-        if model_changed {
+        let thought_level_changed = if let Some(new_extra) = &req.extra {
+            let existing_extra: serde_json::Value =
+                serde_json::from_str(&existing.extra).unwrap_or_else(|_| serde_json::json!({}));
+            new_extra.get("thought_level").is_some()
+                && new_extra.get("thought_level") != existing_extra.get("thought_level")
+        } else {
+            false
+        };
+
+        if model_changed || thought_level_changed {
             info!(
-                model_changed = true,
-                "Conversation updated, killing agent task due to model change"
+                model_changed,
+                thought_level_changed,
+                "Conversation updated, killing agent task due to model or thought_level change"
             );
             if let Err(e) = task_manager.kill(id, None) {
-                warn!(error = %ErrorChain(&e), "Failed to kill agent after model change");
+                warn!(error = %ErrorChain(&e), "Failed to kill agent after model/thought_level change");
             }
         }
 

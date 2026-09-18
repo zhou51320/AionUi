@@ -19,6 +19,7 @@ import AionSelect from '@/renderer/components/base/AionSelect';
 import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
 import AddMcpServerModal from '@/renderer/pages/settings/components/AddMcpServerModal';
 import McpServerItem from '@/renderer/pages/settings/ToolsSettings/McpServerItem';
+import MarketResourceList from '@/renderer/components/market/MarketResourceList';
 import {
   useMcpServers,
   useMcpConnection,
@@ -272,10 +273,11 @@ const ToolsModalContent: React.FC = () => {
   // ELECTRON-1A1: guard message calls so async MCP callbacks that resolve after this
   // component unmounts don't hit a null Arco context holder (null.addInstance crash).
   const mcpMessage = useMountedMessage(rawMcpMessage);
+  const [activeTab, setActiveTab] = useState<'installed' | 'market'>('installed');
   const [imageGenerationModel, setImageGenerationModel] = useState<ImageGenerationModelSetting | undefined>();
   const [isUpdatingImageGeneration, setIsUpdatingImageGeneration] = useState(false);
   const { modelListWithImage: data } = useConfigModelListWithImage();
-  const { mcpServers, extensionMcpServers, saveMcpServers, setMcpServers, isMcpServersLoading } = useMcpServers();
+  const { mcpServers, extensionMcpServers, saveMcpServers, setMcpServers, isMcpServersLoading, refreshMcpServers } = useMcpServers();
   const builtinImageGenServer = useMemo(() => mcpServers.find(isBuiltinImageGenServer), [mcpServers]);
   const isImageGenerationServerLoading = isMcpServersLoading && !builtinImageGenServer;
 
@@ -487,20 +489,53 @@ const ToolsModalContent: React.FC = () => {
     <div className='flex flex-col h-full w-full'>
       {mcpMessageContext}
 
-      {/* Content Area */}
-      <AionScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
-        <div className='space-y-16px'>
-          {/* MCP 工具配置 */}
-          <div className='px-[12px] md:px-[32px] py-[24px] bg-2 rd-12px md:rd-16px flex flex-col min-h-0 border border-border-2'>
-            <div className='flex-1 min-h-0'>
-              <AionScrollArea
-                className={classNames('h-full', isPageMode && 'overflow-visible')}
-                disableOverflow={isPageMode}
-              >
-                <ModalMcpManagementSection
-                  message={mcpMessage}
-                  mcpServers={mcpServers}
-                  extensionMcpServers={extensionMcpServers}
+      {/* Tab Switcher */}
+      <div className='flex items-center gap-8px mb-16px shrink-0'>
+        <button
+          type='button'
+          className={classNames(
+            'px-14px py-6px text-13px font-medium rd-8px transition-all cursor-pointer border',
+            activeTab === 'installed'
+              ? 'bg-primary-6 text-white border-primary-6 shadow-sm'
+              : 'bg-fill-2 text-t-secondary border-border-2 hover:text-t-primary'
+          )}
+          onClick={() => setActiveTab('installed')}
+        >
+          {t('settings.toolsInstalled', { defaultValue: '已安装工具' })}
+        </button>
+        <button
+          type='button'
+          className={classNames(
+            'px-14px py-6px text-13px font-medium rd-8px transition-all cursor-pointer border',
+            activeTab === 'market'
+              ? 'bg-primary-6 text-white border-primary-6 shadow-sm'
+              : 'bg-fill-2 text-t-secondary border-border-2 hover:text-t-primary'
+          )}
+          onClick={() => setActiveTab('market')}
+        >
+          {t('settings.toolsMarket', { defaultValue: '市场' })}
+        </button>
+      </div>
+
+      {activeTab === 'market' ? (
+        <AionScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
+          <MarketResourceList category='plugin' onInstalled={() => void refreshMcpServers()} />
+        </AionScrollArea>
+      ) : (
+        /* Content Area */
+        <AionScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
+          <div className='space-y-16px'>
+            {/* MCP 工具配置 */}
+            <div className='px-[12px] md:px-[32px] py-[24px] bg-2 rd-12px md:rd-16px flex flex-col min-h-0 border border-border-2'>
+              <div className='flex-1 min-h-0'>
+                <AionScrollArea
+                  className={classNames('h-full', isPageMode && 'overflow-visible')}
+                  disableOverflow={isPageMode}
+                >
+                  <ModalMcpManagementSection
+                    message={mcpMessage}
+                    mcpServers={mcpServers}
+                    extensionMcpServers={extensionMcpServers}
                   setMcpServers={setMcpServers}
                   saveMcpServers={saveMcpServers}
                   isPageMode={isPageMode}
@@ -616,6 +651,7 @@ const ToolsModalContent: React.FC = () => {
           </div>
         </div>
       </AionScrollArea>
+      )}
     </div>
   );
 };

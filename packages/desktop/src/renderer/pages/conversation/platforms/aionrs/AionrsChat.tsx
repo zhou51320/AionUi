@@ -34,6 +34,7 @@ const AionrsChat: React.FC<{
   modelSelection: AionrsModelSelection;
   thoughtLevel?: AcpDerivedOption | null;
   onSetThoughtLevel?: (optionId: string, value: string) => Promise<unknown>;
+  initialThoughtLevel?: string;
   session_mode?: string;
   cron_job_id?: string;
   emptySlot?: React.ReactNode;
@@ -51,6 +52,7 @@ const AionrsChat: React.FC<{
   modelSelection,
   thoughtLevel,
   onSetThoughtLevel,
+  initialThoughtLevel,
   session_mode,
   cron_job_id,
   emptySlot,
@@ -102,6 +104,7 @@ const AionrsChat: React.FC<{
             modelSelection={modelSelection}
             thoughtLevel={thoughtLevel}
             onSetThoughtLevel={onSetThoughtLevel}
+            initialThoughtLevel={initialThoughtLevel}
             session_mode={session_mode}
             agent_name={agent_name}
             teamSendMessage={teamSendMessage}

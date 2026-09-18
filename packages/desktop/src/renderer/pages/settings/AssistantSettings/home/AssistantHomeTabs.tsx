@@ -12,6 +12,7 @@ import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
 import { AionSearchInput } from '@/renderer/components/base';
 import SettingsPageHeader from '../../components/SettingsPageHeader';
+import MarketResourceList from '@/renderer/components/market/MarketResourceList';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -28,12 +29,14 @@ type AssistantHomeTabsProps = {
   onReorderEnabled: (activeId: string, overId: string) => void | Promise<void>;
   onStartChat: (assistant: AssistantListItem) => void;
   /** Tab to show on mount (e.g. return to Official after editing a builtin). */
-  initialTab?: 'enabled' | 'mine' | 'official';
+  initialTab?: 'enabled' | 'mine' | 'official' | 'market';
   /** Notified whenever the active tab changes, so the parent can remember it. */
-  onTabChange?: (tab: 'enabled' | 'mine' | 'official') => void;
+  onTabChange?: (tab: 'enabled' | 'mine' | 'official' | 'market') => void;
+  /** Called when a market assistant is installed */
+  onInstalled?: () => void;
 };
 
-type HomeTab = 'enabled' | 'mine' | 'official';
+type HomeTab = 'enabled' | 'mine' | 'official' | 'market';
 
 const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
   assistants,
@@ -42,6 +45,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
   onOpenDetail,
   onOpenSettings,
   onDuplicate,
+  onInstalled,
   onDelete,
   onCreate,
   onToggleEnabled,
@@ -147,6 +151,10 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
                 label: t('settings.assistantTabOfficial', { defaultValue: 'Official' }),
                 count: counts.official,
               },
+              {
+                key: 'market',
+                label: t('settings.assistantTabMarket', { defaultValue: '市场' }),
+              },
             ]}
             activeTab={tab}
             onTabChange={(key) => selectTab(key as HomeTab)}
@@ -181,7 +189,7 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
               onGoOfficial={() => selectTab('official')}
               searchActive={Boolean(normalizedSearchQuery)}
             />
-          ) : (
+          ) : tab === 'official' ? (
             <OfficialAssistantsGrid
               assistants={filteredAssistants}
               localeKey={localeKey}
@@ -191,6 +199,8 @@ const AssistantHomeTabs: React.FC<AssistantHomeTabsProps> = ({
               onStartChat={onStartChat}
               searchActive={Boolean(normalizedSearchQuery)}
             />
+          ) : (
+            <MarketResourceList category='assistant' onInstalled={onInstalled} />
           )}
         </div>
       </div>

@@ -309,6 +309,13 @@ vi.mock('@arco-design/web-react', () => ({
   },
   Tag: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   Popover: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Dropdown: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Menu: Object.assign(({ children }: { children?: React.ReactNode }) => <>{children}</>, {
+    Item: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    ItemGroup: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    SubMenu: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  }),
   Button: ({
     children,
     onClick,

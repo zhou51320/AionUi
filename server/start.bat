@@ -1,24 +1,62 @@
 @echo off
-chcp 65001 >nul
-echo [AionUi] 正在启动自托管后端服务...
+setlocal enabledelayedexpansion
+title AionUi Server
+cd /d "%~dp0"
 
-REM 检查 Python
-where python >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [错误] 未检测到 Python，请先安装 Python 3.8 并配置环境变量。
+echo ==============================================================================
+echo                      AionUi Server (Windows 7 Offline)
+echo ==============================================================================
+echo.
+
+set "PYTHON_EXE="
+if exist "%~dp0python\python.exe" (
+    set "PYTHON_EXE=%~dp0python\python.exe"
+) else (
+    where python >nul 2>nul
+    if not errorlevel 1 (
+        set "PYTHON_EXE=python"
+    ) else (
+        where py >nul 2>nul
+        if not errorlevel 1 (
+            set "PYTHON_EXE=py"
+        )
+    )
+)
+
+if "%PYTHON_EXE%"=="" (
+    echo [ERROR] Python not found!
+    echo Please install Python 3.8+ or copy Python to the python folder.
     pause
     exit /b 1
 )
 
-REM 初始化数据库（若首次运行）
-if not exist "aionui.db" (
-    echo [AionUi] 检测到首次运行，正在初始化数据库...
-    python app.py --init
+echo [OK] Using Python: %PYTHON_EXE%
+
+if not exist "%~dp0aionui.db" (
+    echo [AionUi] Initializing database...
+    "%PYTHON_EXE%" app.py --init
 )
 
-REM 启动服务
-echo [AionUi] 正在启动服务 (http://0.0.0.0:5000)...
-echo [AionUi] 默认管理员: admin / admin123
-python app.py
+if not exist "%~dp0uploads" (
+    mkdir "%~dp0uploads" 2>nul
+)
 
+echo.
+echo ------------------------------------------------------------------------------
+echo  Service running at:
+echo    * Local:     http://127.0.0.1:5000
+echo    * Network:   http://0.0.0.0:5000
+echo    * Admin:     http://127.0.0.1:5000/admin
+echo    * Default:   admin / admin123
+echo ------------------------------------------------------------------------------
+echo  Press Ctrl+C to stop.
+echo ==============================================================================
+echo.
+
+"%PYTHON_EXE%" app.py
+
+if errorlevel 1 (
+    echo.
+    echo [AionUi] Server stopped with error code: %errorlevel%
+)
 pause

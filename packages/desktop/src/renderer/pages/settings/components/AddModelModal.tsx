@@ -10,7 +10,7 @@ import {
 } from '@/common/utils/modelCapabilities';
 import ModalHOC from '@/renderer/utils/ui/ModalHOC';
 import AionModal from '@/renderer/components/base/AionModal';
-import { InputNumber, Radio, Select } from '@arco-design/web-react';
+import { Checkbox, InputNumber, Radio, Select } from '@arco-design/web-react';
 import { PreviewOpen } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +28,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     const [modelProtocol, setModelProtocol] = useState<string>('openai');
     const [imageInput, setImageInput] = useState<ModelImageInputChoice>('auto');
     const [openAiApiMode, setOpenAiApiMode] = useState<ModelOpenAiApiModeChoice>('auto');
+    const [thoughtLevels, setThoughtLevels] = useState<ModelThoughtLevelChoice[]>([]);
     const [thoughtLevel, setThoughtLevel] = useState<ModelThoughtLevelChoice>('auto');
     const [contextMode, setContextMode] = useState<'auto' | 'custom'>('auto');
     const [customContextLimit, setCustomContextLimit] = useState<number | undefined>(undefined);
@@ -61,6 +62,17 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       const settings = editingModel ? data?.model_settings?.[editingModel] : undefined;
       setImageInput(settings?.image_input ?? 'auto');
       setOpenAiApiMode(settings?.openai_api_mode ?? 'auto');
+
+      const savedThoughtLevels = settings?.thought_levels;
+      if (savedThoughtLevels && savedThoughtLevels.length > 0) {
+        setThoughtLevels(savedThoughtLevels as ModelThoughtLevelChoice[]);
+      } else if (settings?.thought_level && settings.thought_level !== 'auto') {
+        setThoughtLevels([settings.thought_level as ModelThoughtLevelChoice]);
+      } else if (editingModel && detectModelThoughtSupport(editingModel)) {
+        setThoughtLevels(['off', 'low', 'medium', 'high']);
+      } else {
+        setThoughtLevels([]);
+      }
       setThoughtLevel(settings?.thought_level ?? 'auto');
       setModelProtocol(editingModel ? (data?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
 
@@ -87,7 +99,8 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
           imageInput,
           showOpenAiApiMode ? openAiApiMode : 'auto',
           effectiveContextLimit,
-          thoughtLevel
+          thoughtLevel,
+          thoughtLevels
         ),
       };
 
@@ -115,6 +128,8 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       showOpenAiApiMode,
       contextMode,
       customContextLimit,
+      thoughtLevel,
+      thoughtLevels,
     ]);
 
     return (
@@ -239,21 +254,49 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
             <div className='text-13px font-500 text-t-secondary'>
               {t('settings.thoughtLevel', '推理强度 / 思考模式 (Reasoning Effort)')}
             </div>
-            <Select
-              value={thoughtLevel}
-              onChange={(value) => setThoughtLevel(value as ModelThoughtLevelChoice)}
-              options={[
-                { label: t('settings.modelSettingAuto', '自动 (Auto)'), value: 'auto' },
-                { label: t('agent.thoughtLevel.off', '关闭 (Off)'), value: 'off' },
-                { label: t('agent.thoughtLevel.low', '低强度 (Low)'), value: 'low' },
-                { label: t('agent.thoughtLevel.medium', '中强度 (Medium)'), value: 'medium' },
-                { label: t('agent.thoughtLevel.high', '高强度 (High)'), value: 'high' },
-              ]}
-            />
+            <div className='space-y-6px'>
+              <div className='text-12px text-t-secondary'>
+                {t('settings.supportedThoughtLevels', '勾选该模型支持的思考强度 (聊天时可在输入框随时切换):')}
+              </div>
+              <Checkbox.Group
+                options={[
+                  { label: t('agent.thoughtLevel.off', '关闭 (Off)'), value: 'off' },
+                  { label: t('agent.thoughtLevel.low', '低强度 (Low)'), value: 'low' },
+                  { label: t('agent.thoughtLevel.medium', '中强度 (Medium)'), value: 'medium' },
+                  { label: t('agent.thoughtLevel.high', '高强度 (High)'), value: 'high' },
+                ]}
+                value={thoughtLevels}
+                onChange={(vals) => {
+                  const nextLevels = vals as ModelThoughtLevelChoice[];
+                  setThoughtLevels(nextLevels);
+                  if (thoughtLevel !== 'auto' && !nextLevels.includes(thoughtLevel)) {
+                    setThoughtLevel('auto');
+                  }
+                }}
+              />
+            </div>
+            {thoughtLevels.length > 0 && (
+              <div className='space-y-6px pt-4px'>
+                <div className='text-12px text-t-secondary'>
+                  {t('settings.defaultThoughtLevel', '默认思考强度:')}
+                </div>
+                <Select
+                  value={thoughtLevel}
+                  onChange={(val) => setThoughtLevel(val as ModelThoughtLevelChoice)}
+                  options={[
+                    { label: t('settings.modelSettingAuto', '自动 (Auto)'), value: 'auto' },
+                    ...thoughtLevels.map((lvl) => ({
+                      label: t(`agent.thoughtLevel.${lvl}`, lvl),
+                      value: lvl,
+                    })),
+                  ]}
+                />
+              </div>
+            )}
             <div className='text-11px text-t-secondary leading-4'>
               {isReasoningCapable
-                ? t('settings.thoughtLevelSupportedTip', '该模型支持深度推理，可针对此模型指定默认思考强度。')
-                : t('settings.thoughtLevelGeneralTip', '仅适用于支持思考/推理的模型 (如 o1/o3/DeepSeek-R1 等)。若设为自动则使用提供商默认配置。')}
+                ? t('settings.thoughtLevelSupportedTip', '该模型支持深度推理。勾选支持的强度后，在聊天输入框下方即可随时切换本次发送的推理强度。')
+                : t('settings.thoughtLevelGeneralTip', '仅适用于支持思考/推理的模型 (如 o1/o3/DeepSeek-R1 等)。勾选后可在输入框下方随时切换。')}
             </div>
           </div>
 

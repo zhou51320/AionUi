@@ -55,6 +55,13 @@ fn resolve_aionui_config(cli_args: &CliArgs) -> Result<Config, AgentError> {
     };
     config.compat.transport.default_max_tokens = default_transport.default_max_tokens;
     config.compat.transport.model_max_tokens = default_transport.model_max_tokens;
+    if matches!(config.provider, ProviderType::OpenAI) {
+        // AionUi exposes the reasoning-effort selector for supported models and
+        // must keep the corresponding OpenAI-compatible request field enabled.
+        // Workspace config may otherwise override the aionrs default to false,
+        // causing the provider projector to silently omit `reasoning_effort`.
+        config.compat.reasoning.supports_effort = Some(true);
+    }
 
     Ok(config)
 }
@@ -130,7 +137,7 @@ pub struct AionrsAgentManager {
     /// Configured or auto-detected model context limit.
     context_limit: Option<usize>,
     /// Configured thought level / reasoning effort.
-    thought_level: Option<String>,
+    thought_level: RwLock<Option<String>>,
 }
 
 impl Drop for AionrsAgentManager {
@@ -277,6 +284,12 @@ impl AionrsAgentManager {
             );
         }
 
+        let effort = match config_extra.thought_level.as_deref() {
+            Some("low" | "medium" | "high") => config_extra.thought_level.clone(),
+            _ => None,
+        };
+        engine.set_initial_reasoning_effort(effort);
+
         let approval_manager = Arc::new(ToolApprovalManager::new());
 
         if let Some(mode_str) = &config_extra.session_mode {
@@ -319,7 +332,7 @@ impl AionrsAgentManager {
             turn_finished_notify: Arc::new(Notify::new()),
             context_cache,
             context_limit: config_extra.context_limit,
-            thought_level: config_extra.thought_level,
+            thought_level: RwLock::new(config_extra.thought_level),
         })
     }
 
@@ -636,8 +649,13 @@ impl AionrsAgentManager {
     }
 
     pub async fn config_options(&self) -> Result<GetConfigOptionsResponse, AgentError> {
+        let current_mode = self.approval_manager.current_mode();
+        let current_thought = self.thought_level().unwrap_or_else(|| "medium".to_owned());
         Ok(GetConfigOptionsResponse {
-            config_options: vec![aionrs_mode_config_option(self.approval_manager.current_mode())],
+            config_options: vec![
+                aionrs_mode_config_option(current_mode),
+                aionrs_thought_level_config_option(current_thought),
+            ],
         })
     }
 
@@ -649,30 +667,57 @@ impl AionrsAgentManager {
         Arc::clone(&self.context_cache)
     }
 
-    pub fn thought_level(&self) -> Option<&str> {
-        self.thought_level.as_deref()
+    pub fn thought_level(&self) -> Option<String> {
+        self.thought_level.read().ok().and_then(|t| t.clone())
     }
 
     pub async fn set_config_option(&self, option_id: &str, value: &str) -> Result<SetConfigOptionResponse, AgentError> {
         let option_id = option_id.trim();
         let value = value.trim();
 
-        if option_id != AIONRS_MODE_OPTION_ID {
-            return Err(AgentError::bad_request(format!(
-                "Config option '{option_id}' is not available"
-            )));
-        }
-        if !is_aionrs_session_mode(value) {
-            return Err(AgentError::bad_request(format!(
-                "Value '{value}' is not selectable for config option '{option_id}'"
-            )));
+        if option_id == AIONRS_MODE_OPTION_ID {
+            if !is_aionrs_session_mode(value) {
+                return Err(AgentError::bad_request(format!(
+                    "Value '{value}' is not selectable for config option '{option_id}'"
+                )));
+            }
+
+            self.set_mode(value).await?;
+            return Ok(SetConfigOptionResponse {
+                confirmation: ConfigOptionConfirmation::Observed,
+                config_options: Some(self.config_options().await?.config_options),
+            });
         }
 
-        self.set_mode(value).await?;
-        Ok(SetConfigOptionResponse {
-            confirmation: ConfigOptionConfirmation::Observed,
-            config_options: Some(self.config_options().await?.config_options),
-        })
+        if option_id == AIONRS_THOUGHT_LEVEL_OPTION_ID || option_id == "reasoning_effort" || option_id == "effort" {
+            let effort = match value {
+                "low" | "medium" | "high" => Some(value.to_string()),
+                "off" => None,
+                _ => {
+                    return Err(AgentError::bad_request(format!(
+                        "Value '{value}' is not selectable for config option '{option_id}'"
+                    )));
+                }
+            };
+            let mut engine = self.engine.lock().await;
+            engine.set_initial_reasoning_effort(effort);
+            if let Ok(mut lock) = self.thought_level.write() {
+                *lock = Some(value.to_string());
+            }
+            info!(
+                conversation_id = %self.runtime.conversation_id(),
+                thought_level = value,
+                "Aionrs session thought level switched"
+            );
+            return Ok(SetConfigOptionResponse {
+                confirmation: ConfigOptionConfirmation::Observed,
+                config_options: Some(self.config_options().await?.config_options),
+            });
+        }
+
+        Err(AgentError::bad_request(format!(
+            "Config option '{option_id}' is not available"
+        )))
     }
 
     pub async fn get_slash_commands(&self) -> Result<Vec<SlashCommandItem>, AgentError> {
@@ -681,9 +726,28 @@ impl AionrsAgentManager {
 }
 
 const AIONRS_MODE_OPTION_ID: &str = "mode";
+const AIONRS_THOUGHT_LEVEL_OPTION_ID: &str = "thought_level";
 
 fn is_aionrs_session_mode(s: &str) -> bool {
     matches!(s, "default" | "auto_edit" | "yolo")
+}
+
+fn aionrs_thought_level_config_option(current_value: String) -> AcpConfigOptionDto {
+    AcpConfigOptionDto {
+        id: AIONRS_THOUGHT_LEVEL_OPTION_ID.to_owned(),
+        name: Some("Reasoning Effort".to_owned()),
+        label: None,
+        description: None,
+        category: Some("thought_level".to_owned()),
+        option_type: "select".to_owned(),
+        current_value: Some(current_value),
+        options: vec![
+            aionrs_mode_select_option("off", "Off"),
+            aionrs_mode_select_option("low", "Low"),
+            aionrs_mode_select_option("medium", "Medium"),
+            aionrs_mode_select_option("high", "High"),
+        ],
+    }
 }
 
 fn aionrs_mode_config_option(current_value: String) -> AcpConfigOptionDto {

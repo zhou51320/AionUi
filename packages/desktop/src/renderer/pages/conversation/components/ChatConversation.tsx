@@ -243,7 +243,8 @@ const AionrsConversationPanel: React.FC<{ conversation: AionrsConversation; slid
         emptySlot={emptySlot}
         modelSelection={modelSelection}
         thoughtLevel={runtimeConfig.thoughtLevel}
-        onSetThoughtLevel={handleThoughtLevelSetOption}
+        onSetThoughtLevel={runtimeConfig.thoughtLevel ? handleThoughtLevelSetOption : undefined}
+        initialThoughtLevel={(conversation.extra as Record<string, any>)?.thought_level}
         session_mode={conversation.extra?.session_mode}
         cron_job_id={cronJobId}
         loadedSkills={(conversation.extra as { skills?: string[] } | undefined)?.skills}

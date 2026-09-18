@@ -265,7 +265,7 @@ vi.mock('@arco-design/web-react', async (importOriginal) => {
   };
 });
 
-import { supportsOpenAiApiMode, updateModelSettings } from '@/common/utils/modelCapabilities';
+import { resolveModelThoughtLevels, supportsOpenAiApiMode, updateModelSettings } from '@/common/utils/modelCapabilities';
 import AddModelModal from '@/renderer/pages/settings/components/AddModelModal';
 import AddPlatformModal from '@/renderer/pages/settings/components/AddPlatformModal';
 import ModelModalContent from '@/renderer/components/settings/SettingsModal/contents/ModelModalContent';
@@ -349,6 +349,53 @@ describe('updateModelSettings', () => {
         'auto'
       )
     ).toEqual({ other: { image_input: 'supported' } });
+  });
+
+  it('saves multiple thought_levels and default thought_level correctly', () => {
+    const result = updateModelSettings(
+      undefined,
+      ['deepseek-reasoner'],
+      'auto',
+      'auto',
+      'auto',
+      'medium',
+      ['off', 'low', 'medium', 'high']
+    );
+
+    expect(result['deepseek-reasoner']).toEqual({
+      thought_level: 'medium',
+      thought_levels: ['off', 'low', 'medium', 'high'],
+    });
+  });
+});
+
+describe('resolveModelThoughtLevels', () => {
+  it('returns configured thought_levels if present', () => {
+    expect(
+      resolveModelThoughtLevels('custom-model', {
+        thought_levels: ['low', 'high'],
+      })
+    ).toEqual(['low', 'high']);
+  });
+
+  it('falls back to [off, thought_level] when only thought_level is configured', () => {
+    expect(
+      resolveModelThoughtLevels('custom-model', {
+        thought_level: 'medium',
+      })
+    ).toEqual(['off', 'medium']);
+  });
+
+  it('auto-detects reasoning models and returns full levels', () => {
+    expect(resolveModelThoughtLevels('deepseek-r1')).toEqual(['off', 'low', 'medium', 'high']);
+    expect(resolveModelThoughtLevels('o1-mini')).toEqual(['off', 'low', 'medium', 'high']);
+    expect(resolveModelThoughtLevels('o3-mini')).toEqual(['off', 'low', 'medium', 'high']);
+    expect(resolveModelThoughtLevels('claude-3-7-sonnet')).toEqual(['off', 'low', 'medium', 'high']);
+  });
+
+  it('returns empty list for non-reasoning models without config', () => {
+    expect(resolveModelThoughtLevels('gpt-4o')).toEqual([]);
+    expect(resolveModelThoughtLevels('claude-3-5-sonnet')).toEqual([]);
   });
 });
 

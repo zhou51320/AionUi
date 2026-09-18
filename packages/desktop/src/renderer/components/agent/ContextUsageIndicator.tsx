@@ -214,8 +214,6 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
       position='top'
       trigger={pinned ? 'click' : 'hover'}
       popupVisible={popoverVisible}
-      mouseEnterDelay={300}
-      mouseLeaveDelay={200}
       onVisibleChange={(visible) => {
         if (!pinned) {
           setPopoverVisible(visible);

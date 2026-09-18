@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import useModeModeList from '@renderer/hooks/agent/useModeModeList';
 import useProtocolDetection from '@renderer/hooks/system/useProtocolDetection';
 import AionModal from '@/renderer/components/base/AionModal';
+import { getSelfHostedBaseUrl, getSelfHostedToken } from '@/common/config/selfHosted';
 import {
   DEFAULT_PLATFORM_VALUE,
   MODEL_PLATFORMS,
@@ -201,6 +202,20 @@ const renderPlatformOption = (platform: PlatformConfig, t?: (key: string) => str
   );
 };
 
+interface ServerAssignedConfig {
+  base_url?: string;
+  api_key?: string;
+  model_name?: string;
+  platform?: string;
+  provider_name?: string;
+  models?: string[];
+  model_protocol?: string;
+  image_input?: ModelImageInputChoice;
+  openai_api_mode?: ModelOpenAiApiModeChoice;
+  thought_level?: string;
+  context_limit?: number;
+}
+
 const AddPlatformModal = ModalHOC<{
   onSubmit: (platform: IProvider) => void;
   deepLinkData?: DeepLinkAddProviderDetail;
@@ -211,6 +226,8 @@ const AddPlatformModal = ModalHOC<{
   // 用于追踪上次检测时的输入值，避免重复检测
   // Track last detection input to avoid redundant detection
   const [lastDetectionInput, setLastDetectionInput] = useState<{ base_url: string; api_key: string } | null>(null);
+  const [serverConfig, setServerConfig] = useState<ServerAssignedConfig | null>(null);
+  const [fetchingServerConfig, setFetchingServerConfig] = useState<boolean>(false);
 
   const platformValue = Form.useWatch('platform', form);
   const base_url = Form.useWatch('base_url', form);
@@ -222,9 +239,10 @@ const AddPlatformModal = ModalHOC<{
   // 获取当前选中的平台配置 / Get current selected platform config
   const selectedPlatform = useMemo(() => getPlatformByValue(platformValue), [platformValue]);
 
-  const platform = selectedPlatform?.platform ?? 'gemini';
-  // 判断是否为"自定义"选项（没有预设 base_url） / Check if "Custom" option (no preset base_url)
-  const isCustom = isCustomOption(platformValue);
+  const platform = selectedPlatform?.platform ?? 'custom';
+  // 判断是否为"自定义"选项（没有预设 base_url）或服务器分配
+  const isServerAssigned = platformValue === 'server-assigned';
+  const isCustom = isCustomOption(platformValue) || isServerAssigned;
   const isBedrock = platform === 'bedrock';
   const isGemini = isGeminiPlatform(platform);
   const isNewApi = isNewApiPlatform(platform);
@@ -298,7 +316,7 @@ const AddPlatformModal = ModalHOC<{
     }
   };
 
-  // 弹窗打开时重置表单 / Reset form when modal opens
+  // 弹窗打开时重置表单并拉取服务器分配的模型 / Reset form and fetch server config when modal opens
   useEffect(() => {
     if (modalProps.visible) {
       form.resetFields();
@@ -313,12 +331,46 @@ const AddPlatformModal = ModalHOC<{
 
       // Pre-fill from deep link data (aionui:// protocol)
       if (deepLinkData?.base_url || deepLinkData?.api_key) {
-        // Default to new-api platform for deep links (typical one-api/new-api usage)
-        form.setFieldValue('platform', deepLinkData.platform || 'new-api');
+        form.setFieldValue('platform', deepLinkData.platform || 'custom');
         if (deepLinkData.base_url) form.setFieldValue('base_url', deepLinkData.base_url);
         if (deepLinkData.api_key) form.setFieldValue('api_key', deepLinkData.api_key);
       } else {
-        form.setFieldValue('platform', DEFAULT_PLATFORM_VALUE);
+        form.setFieldValue('platform', 'server-assigned');
+
+        // 拉取服务器分配给用户的模型展示并自动填入
+        setFetchingServerConfig(true);
+        const baseUrl = getSelfHostedBaseUrl();
+        const token = getSelfHostedToken();
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        fetch(`${baseUrl}/api/config`, { headers })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((json) => {
+            if (json?.code === 0 && json.data) {
+              const data: ServerAssignedConfig = json.data;
+              setServerConfig(data);
+              form.setFieldValue('base_url', data.base_url || '');
+              form.setFieldValue('api_key', data.api_key || '');
+              const modelList =
+                Array.isArray(data.models) && data.models.length > 0
+                  ? data.models
+                  : data.model_name
+                    ? [data.model_name]
+                    : [];
+              form.setFieldValue('model', modelList);
+              if (data.model_protocol) setModelProtocol(data.model_protocol);
+              if (data.image_input) setImageInput(data.image_input as ModelImageInputChoice);
+              if (data.openai_api_mode) setOpenAiApiMode(data.openai_api_mode as ModelOpenAiApiModeChoice);
+              message.success(t('settings.serverModelLoaded', { defaultValue: '已拉取服务器分配的模型' }));
+            }
+          })
+          .catch((err) => {
+            console.warn('Failed to fetch server model config:', err);
+          })
+          .finally(() => {
+            setFetchingServerConfig(false);
+          });
       }
     }
   }, [modalProps.visible, deepLinkData]);
@@ -341,14 +393,14 @@ const AddPlatformModal = ModalHOC<{
     form
       .validate()
       .then((values) => {
-        // 如果有 i18nKey 使用翻译后的名称，否则使用 platform 的 name
-        // If i18nKey exists use translated name, otherwise use platform name
-        const name = selectedPlatform?.i18nKey
-          ? t(selectedPlatform.i18nKey)
-          : (selectedPlatform?.name ?? values.platform);
+        const isServer = values.platform === 'server-assigned';
+        const name = isServer
+          ? (serverConfig?.provider_name || serverConfig?.model_name || '自托管模型服务')
+          : (t('settings.platformCustom', { defaultValue: '自定义服务商' }));
+
         const provider: IProvider = {
           id: uuid(),
-          platform: selectedPlatform?.platform ?? 'custom',
+          platform: 'custom',
           name,
           // 优先使用用户输入的 base_url，否则使用平台预设值
           // Prefer user input base_url, fallback to platform preset
@@ -416,45 +468,52 @@ const AddPlatformModal = ModalHOC<{
       {messageContext}
       <div>
         <Form form={form} layout='vertical' className='[&_.arco-form-item]:mb-12px [&_.arco-form-item:last-child]:mb-0'>
-          {/* 模型平台选择（第一层）/ Model Platform Selection (first level) */}
+          {/* 模型平台选择：仅保留服务器拉取的模板和自定义 */}
           <Form.Item
-            initialValue={DEFAULT_PLATFORM_VALUE}
-            label={t('settings.modelPlatform')}
+            initialValue='server-assigned'
+            label={t('settings.modelPlatform', { defaultValue: '模型平台' })}
             field={'platform'}
             required
             rules={[{ required: true }]}
           >
             <Select
-              showSearch
-              filterOption={(inputValue, option) => {
-                const optionValue = (option as React.ReactElement<{ value?: string }>)?.props?.value;
-                const plat = MODEL_PLATFORMS.find((p) => p.value === optionValue);
-                return plat?.name.toLowerCase().includes(inputValue.toLowerCase()) ?? false;
-              }}
+              value={platformValue}
               onChange={(value) => {
-                const plat = MODEL_PLATFORMS.find((p) => p.value === value);
-                if (plat) {
-                  // model is a multi-select field — reset to an empty array, not
-                  // '' (which would surface as a stray empty tag).
+                form.setFieldValue('platform', value);
+                if (value === 'server-assigned') {
+                  if (serverConfig) {
+                    form.setFieldValue('base_url', serverConfig.base_url || '');
+                    form.setFieldValue('api_key', serverConfig.api_key || '');
+                    const modelList =
+                      Array.isArray(serverConfig.models) && serverConfig.models.length > 0
+                        ? serverConfig.models
+                        : serverConfig.model_name
+                          ? [serverConfig.model_name]
+                          : [];
+                    form.setFieldValue('model', modelList);
+                    if (serverConfig.model_protocol) setModelProtocol(serverConfig.model_protocol);
+                    if (serverConfig.image_input) setImageInput(serverConfig.image_input as ModelImageInputChoice);
+                    if (serverConfig.openai_api_mode) setOpenAiApiMode(serverConfig.openai_api_mode as ModelOpenAiApiModeChoice);
+                  }
+                } else if (value === 'custom') {
+                  form.setFieldValue('base_url', '');
+                  form.setFieldValue('api_key', '');
                   form.setFieldValue('model', []);
-                  // Prefill the platform's default Base URL so users can see and
-                  // edit it. Custom / New API have no preset — clear the field so
-                  // it doesn't carry over the previously selected platform's URL.
-                  form.setFieldValue('base_url', plat.base_url ?? '');
                 }
               }}
-              renderFormat={(option) => {
-                const optionValue = (option as { value?: string })?.value;
-                const plat = MODEL_PLATFORMS.find((p) => p.value === optionValue);
-                if (!plat) return optionValue;
-                return renderPlatformOption(plat, t);
-              }}
             >
-              {MODEL_PLATFORMS.map((plat) => (
-                <Select.Option key={plat.value} value={plat.value}>
-                  {renderPlatformOption(plat, t)}
-                </Select.Option>
-              ))}
+              <Select.Option key='server-assigned' value='server-assigned'>
+                {serverConfig?.provider_name
+                  ? `${serverConfig.provider_name} (服务器分配模型)`
+                  : serverConfig?.model_name
+                    ? `服务器分配模型 (${serverConfig.model_name})`
+                    : fetchingServerConfig
+                      ? '从服务器拉取模型中...'
+                      : '服务器分配模型'}
+              </Select.Option>
+              <Select.Option key='custom' value='custom'>
+                {t('settings.platformCustom', { defaultValue: '自定义' })}
+              </Select.Option>
             </Select>
           </Form.Item>
 

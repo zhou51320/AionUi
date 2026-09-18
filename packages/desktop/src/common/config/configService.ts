@@ -74,9 +74,9 @@ class ConfigServiceImpl {
     return this.initPromise;
   }
 
-  async syncFromSelfHosted(): Promise<void> {
+  async syncFromSelfHosted(): Promise<boolean> {
     const token = getSelfHostedToken();
-    if (!token) return;
+    if (!token) return false;
     try {
       const baseUrl = getSelfHostedBaseUrl();
       const res = await fetch(`${baseUrl}/api/config`, {
@@ -102,11 +102,60 @@ class ConfigServiceImpl {
               this.cache.set(`synced_${k}`, v);
             }
           }
+
+          // Synchronize provider and models into AionCore backend (/api/providers)
+          const providerId = 'self-hosted-provider';
+          const platform = cfg.platform || 'openai';
+          const providerName = cfg.provider_name || '自托管模型服务';
+          const models: string[] = Array.isArray(cfg.models) && cfg.models.length > 0
+            ? cfg.models
+            : (cfg.model_name ? [cfg.model_name] : []);
+
+          const customConfigs: Record<string, unknown> = {};
+          const modelProtocols: Record<string, string> = {};
+          for (const m of models) {
+            customConfigs[m] = {
+              image_input: cfg.image_input || 'auto',
+              openai_api_mode: cfg.openai_api_mode || 'auto',
+              thought_level: cfg.thought_level || 'auto',
+              context_limit: cfg.context_limit ? Number(cfg.context_limit) : undefined,
+            };
+            if (cfg.model_protocol) {
+              modelProtocols[m] = cfg.model_protocol;
+            }
+          }
+
+          const providerPayload = {
+            id: providerId,
+            platform,
+            name: providerName,
+            base_url: cfg.base_url || '',
+            api_key: cfg.api_key || '',
+            models,
+            enabled: true,
+            context_limit: cfg.context_limit ? Number(cfg.context_limit) : undefined,
+            model_custom_configs: customConfigs,
+            model_protocols: modelProtocols,
+          };
+
+          try {
+            const existingList = await fetchJson<Array<{ id: string }>>('GET', '/api/providers');
+            const exists = Array.isArray(existingList) && existingList.some((p) => p.id === providerId);
+            if (exists) {
+              await fetchJson('PUT', `/api/providers/${providerId}`, providerPayload);
+            } else {
+              await fetchJson('POST', '/api/providers', providerPayload);
+            }
+            return true;
+          } catch (providerErr) {
+            console.warn('ConfigService: failed to persist self-hosted provider to /api/providers:', providerErr);
+          }
         }
       }
     } catch (err) {
       console.warn('ConfigService: failed to sync from self-hosted backend:', err);
     }
+    return false;
   }
 
   whenReady(): Promise<void> {

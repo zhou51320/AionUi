@@ -60,7 +60,7 @@ function downloadUrl(url, destPath) {
       }
 
       const get = url.startsWith('https') ? https.get : require('http').get;
-      get(url, (res) => {
+      const req = get(url, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           follow(res.headers.location, redirectCount + 1);
           return;
@@ -82,7 +82,11 @@ function downloadUrl(url, destPath) {
           fs.unlinkSync(destPath);
           reject(err);
         });
-      }).on('error', reject);
+      });
+      req.setTimeout(5000, () => {
+        req.destroy(new Error('Request timeout'));
+      });
+      req.on('error', reject);
     };
 
     follow(url);
@@ -157,10 +161,14 @@ async function prepareHubResources() {
 
 // Support both direct execution and require() from build-with-builder.js
 if (require.main === module) {
-  prepareHubResources().catch((err) => {
-    console.error('[hub] Fatal error:', err);
-    process.exit(1);
-  });
+  prepareHubResources()
+    .then(() => {
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error('[hub] Fatal error:', err);
+      process.exit(1);
+    });
 }
 
 module.exports = { prepareHubResources };

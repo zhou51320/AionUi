@@ -20,6 +20,7 @@ import {
   type UpdateNotificationState,
 } from './updateNotificationState';
 import { getIncludePrerelease, runUpdateCheck, type CheckUpdateOutcome } from './checkForUpdatesShared';
+import { getSelfHostedBaseUrl } from '@/common/config/selfHosted';
 import { setUpdateReadyState } from './updateReadyState';
 import { IS_DISCONTINUED_BUILD } from '@/renderer/utils/discontinuedBuild';
 import { OPEN_MIGRATION_DIALOG_EVENT } from './UpdateMigrationDialog';
@@ -348,6 +349,7 @@ export const useUpdateNotificationController = () => {
       url: asset.url,
       fallbackUrl: asset.fallbackUrl,
       file_name: asset.name,
+      selfHostedUrl: getSelfHostedBaseUrl(),
     });
     if (!res?.success || !res.data) {
       dispatch({ type: 'checkError', message: res?.msg || t('update.downloadStartFailed') });

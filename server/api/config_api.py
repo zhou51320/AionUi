@@ -31,12 +31,28 @@ def update_config():
         user_config.base_url = (data['base_url'] or '').strip()
     if 'model_name' in data:
         user_config.model_name = (data['model_name'] or '').strip()
+
+    extra = {}
+    if user_config.extra_config:
+        try:
+            extra = json.loads(user_config.extra_config)
+        except Exception:
+            extra = {}
+
+    for k in ['platform', 'provider_name', 'models', 'model_protocol', 'image_input', 'openai_api_mode', 'thought_level', 'context_limit']:
+        if k in data:
+            extra[k] = data[k]
+
     if 'extra_config' in data:
-        extra = data['extra_config']
-        if isinstance(extra, str):
-            user_config.extra_config = extra
-        elif isinstance(extra, dict):
-            user_config.extra_config = json.dumps(extra, ensure_ascii=False)
+        if isinstance(data['extra_config'], dict):
+            extra.update(data['extra_config'])
+        elif isinstance(data['extra_config'], str):
+            try:
+                extra.update(json.loads(data['extra_config']))
+            except Exception:
+                pass
+
+    user_config.extra_config = json.dumps(extra, ensure_ascii=False)
 
     db.session.commit()
     return api_response(message='配置已更新', data=user_config.to_dict(decrypt=True))

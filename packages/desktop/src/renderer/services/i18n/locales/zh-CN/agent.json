@@ -43,7 +43,15 @@
   "thoughtLevel": {
     "label": "思考强度",
     "switchSuccess": "思考强度切换成功",
-    "switchFailed": "思考强度切换失败"
+    "switchFailed": "思考强度切换失败",
+    "off": "关闭 (Off)",
+    "low": "低强度 (Low)",
+    "medium": "中强度 (Medium)",
+    "high": "高强度 (High)",
+    "offShort": "关",
+    "lowShort": "低",
+    "mediumShort": "中",
+    "highShort": "高"
   },
   "warmup": {
     "clickToWake": "点击唤醒该成员"

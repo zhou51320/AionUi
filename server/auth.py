@@ -3,7 +3,7 @@ from functools import wraps
 import jwt
 from flask import g, jsonify, request
 from config import Config
-from models import User
+from models import db, User
 
 def api_response(code=0, message='success', data=None, status=200):
     payload = {
@@ -29,11 +29,33 @@ def generate_token(user: User) -> str:
 def decode_token(token: str) -> dict:
     return jwt.decode(token, Config.SECRET_KEY, algorithms=['HS256'])
 
+def verify_token(token: str):
+    try:
+        payload = decode_token(token)
+        user_id = payload.get('user_id')
+        if user_id:
+            user = db.session.get(User, user_id) if hasattr(db.session, 'get') else User.query.get(user_id)
+            if user and user.is_active:
+                return user
+    except Exception:
+        pass
+    return None
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # 1. Check Flask Web Session first (for web admin console)
+        from flask import session
+        session_user_id = session.get('admin_user_id') or session.get('user_id')
+        if session_user_id:
+            user = User.query.get(session_user_id)
+            if user and user.is_active:
+                g.user = user
+                return f(*args, **kwargs)
+
+        # 2. Check JWT Authorization Header or query param
         auth_header = request.headers.get('Authorization', '')
-        token = auth_header.replace('Bearer ', '').strip()
+        token = auth_header.replace('Bearer ', '').strip() or request.args.get('token', '').strip()
         if not token:
             return api_error(code=401, message='未登录', status=401)
         try:

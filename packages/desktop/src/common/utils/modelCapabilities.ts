@@ -9,6 +9,7 @@ import type {
   ModelImageInputCapability,
   ModelOpenAiApiMode,
   ModelSettings,
+  ModelThoughtLevel,
   ModelType,
 } from '@/common/config/storage';
 
@@ -70,8 +71,7 @@ export type ModelThoughtLevelChoice = 'auto' | 'off' | 'low' | 'medium' | 'high'
 /** Auto-detect whether a model supports reasoning/thought level settings. */
 export const detectModelThoughtSupport = (modelName: string): boolean => {
   const normalized = getBaseModelName(modelName);
-  return /o1|o3|r1|reasoning|reasoner|thinking|think/i.test(normalized) ||
-    /claude-3-7-sonnet/i.test(normalized);
+  return /o1|o3|r1|reasoning|reasoner|thinking|think|deepseek|claude-3-7|qwq|gemini-2/i.test(normalized);
 };
 
 /** Auto-detect default context window (in tokens) based on model name. */
@@ -101,13 +101,15 @@ export const updateModelSettings = (
   imageInput: ModelImageInputChoice,
   openAiApiMode: ModelOpenAiApiModeChoice,
   contextLimit?: ModelContextLimitChoice,
-  thoughtLevel?: ModelThoughtLevelChoice
+  thoughtLevel?: ModelThoughtLevelChoice,
+  thoughtLevels?: ModelThoughtLevelChoice[]
 ): Record<string, ModelSettings> => {
   const next = { ...current };
 
   for (const modelId of modelIds) {
     const isAutoLimit = contextLimit === undefined || contextLimit === 'auto' || (typeof contextLimit === 'number' && contextLimit <= 0);
-    const isAutoThought = thoughtLevel === undefined || thoughtLevel === 'auto';
+    const hasCustomLevels = Array.isArray(thoughtLevels) && thoughtLevels.length > 0;
+    const isAutoThought = (thoughtLevel === undefined || thoughtLevel === 'auto') && !hasCustomLevels;
     if (imageInput === 'auto' && openAiApiMode === 'auto' && isAutoLimit && isAutoThought) {
       delete next[modelId];
       continue;
@@ -117,11 +119,35 @@ export const updateModelSettings = (
     if (imageInput !== 'auto') settings.image_input = imageInput;
     if (openAiApiMode !== 'auto') settings.openai_api_mode = openAiApiMode;
     if (!isAutoLimit && typeof contextLimit === 'number') settings.context_limit = contextLimit;
-    if (!isAutoThought && thoughtLevel) settings.thought_level = thoughtLevel;
+    if (!isAutoThought && thoughtLevel && thoughtLevel !== 'auto') settings.thought_level = thoughtLevel;
+    if (hasCustomLevels) settings.thought_levels = thoughtLevels as ModelThoughtLevel[];
     next[modelId] = settings;
   }
 
   return next;
+};
+
+/**
+ * Resolve the list of supported reasoning/thought levels for a model.
+ * If explicitly configured in model settings (thought_levels), uses that list.
+ * Otherwise, if legacy thought_level is configured, includes it along with 'off'.
+ * Otherwise, if the model is detected to support reasoning, returns standard levels ['off', 'low', 'medium', 'high'].
+ * Otherwise returns empty list [].
+ */
+export const resolveModelThoughtLevels = (
+  modelName: string,
+  modelSettings?: ModelSettings
+): ModelThoughtLevel[] => {
+  if (modelSettings?.thought_levels && modelSettings.thought_levels.length > 0) {
+    return modelSettings.thought_levels;
+  }
+  if (modelSettings?.thought_level && modelSettings.thought_level !== 'auto') {
+    return ['off', modelSettings.thought_level];
+  }
+  if (detectModelThoughtSupport(modelName)) {
+    return ['off', 'low', 'medium', 'high'];
+  }
+  return [];
 };
 
 /**

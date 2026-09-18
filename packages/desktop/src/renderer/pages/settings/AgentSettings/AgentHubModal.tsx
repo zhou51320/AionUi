@@ -33,11 +33,9 @@ export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel 
       const baseUrl = getSelfHostedBaseUrl();
       const token = getSelfHostedToken();
       const query = cat && cat !== 'all' ? `?category=${encodeURIComponent(cat)}` : '';
-      const response = await fetch(`${baseUrl}/api/market/files${query}`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const response = await fetch(`${baseUrl}/api/market/files${query}`, { headers });
       if (response.ok) {
         const json = await response.json();
         if (json.code === 0 && Array.isArray(json.data)) {
@@ -67,11 +65,9 @@ export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel 
     try {
       const baseUrl = getSelfHostedBaseUrl();
       const token = getSelfHostedToken();
-      const response = await fetch(`${baseUrl}/api/market/download/${item.id}`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const response = await fetch(`${baseUrl}/api/market/download/${item.id}`, { headers });
 
       if (!response.ok) {
         Message.error(t('common.downloadFailed', { defaultValue: '下载失败' }));

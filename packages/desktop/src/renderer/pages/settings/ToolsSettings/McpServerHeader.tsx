@@ -3,6 +3,7 @@ import { Button, Dropdown, Menu, Popover, Tooltip } from '@arco-design/web-react
 import { Check, CloseSmall, Info, LoadingOne, Refresh, Write, DeleteFour, SettingOne, Login } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { exportResourceArchive } from '@/renderer/utils/exportResource';
 import type { McpOAuthStatus } from '@/renderer/hooks/mcp/useMcpOAuth';
 import FeedbackButton from '@/renderer/components/base/FeedbackButton';
 import { iconColors } from '@/renderer/styles/colors';
@@ -213,6 +214,18 @@ const McpServerHeader: React.FC<McpServerHeaderProps> = ({
                       <Write size={'14'} />
                       {t('settings.mcpEditServer')}
                     </div>
+                  </Menu.Item>
+                  <Menu.Item
+                    key='export'
+                    onClick={() =>
+                      void exportResourceArchive({
+                        type: 'plugin',
+                        name: server.name,
+                        data: server,
+                      })
+                    }
+                  >
+                    {t('common.export', { defaultValue: '导出' })}
                   </Menu.Item>
                   <Menu.Item key='delete' onClick={() => onDeleteServer(server.id)}>
                     <div className='flex items-center gap-2 text-red-500'>

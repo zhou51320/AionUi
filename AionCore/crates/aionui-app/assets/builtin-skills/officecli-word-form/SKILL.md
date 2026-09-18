@@ -25,29 +25,15 @@ description: "Use this skill to create fillable Word forms (.docx) with real Con
 
 ## BEFORE YOU START (CRITICAL)
 
-**If `officecli` is not installed:**
-
-`macOS / Linux`
-
-```bash
-if ! command -v officecli >/dev/null 2>&1; then
-    curl -fsSL https://d.officecli.ai/install.sh | bash
-fi
-```
-
-`Windows (PowerShell)`
-
-```powershell
-if (-not (Get-Command officecli -ErrorAction SilentlyContinue)) {
-    irm https://d.officecli.ai/install.ps1 | iex
-}
-```
-
-Verify: `officecli --version`
-
-If `officecli` is still not found after first install, open a new terminal and run the verify command again.
-
-If the install command above fails (e.g. blocked by security policy, no network access, or insufficient permissions), install manually — download the binary for your platform from https://github.com/iOfficeAI/OfficeCLI/releases — then re-run the verify command.
+`officecli` is pre-bundled in AionUi. **Do not run manual install scripts.** Locate and invoke `officecli` in the following order:
+1. Direct command if available in PATH: `officecli` (or `officecli.exe`)
+2. In AionUi's pre-bundled resources directory on Windows:
+   - Check `$env:LOCALAPPDATA\Programs\AionUi\resources\officecli.exe`
+   - Check `(Get-Process -Name AionUi -ErrorAction SilentlyContinue).Path | Split-Path | Join-Path -ChildPath "resources\officecli.exe"`
+   - Check `.\resources\officecli.exe` or `..\resources\officecli.exe` (relative to current directory)
+   - Fallback: `$env:LOCALAPPDATA\OfficeCli\officecli.exe`
+   If found, invoke directly via `& "<resolved-path>" <args>` or set an alias `Set-Alias officecli "<resolved-path>"`.
+3. macOS / Linux: `/Applications/AionUi.app/Contents/Resources/officecli` or `~/.local/bin/officecli`
 
 ## Help-First Rule
 

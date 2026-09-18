@@ -58,6 +58,8 @@ pub struct ModelSettings {
     pub context_limit: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thought_level: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thought_levels: Option<Vec<String>>,
 }
 
 /// Health status values for a model.

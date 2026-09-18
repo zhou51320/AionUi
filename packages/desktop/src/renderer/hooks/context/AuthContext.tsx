@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { mutate } from 'swr';
 import { PREVIEW_SCOPE_KEY_PREFIX } from '@/renderer/pages/conversation/Preview/context/previewScope';
 import { refreshSession } from '@/common/adapter/sessionRefresh';
 import {
@@ -10,6 +11,7 @@ import {
   setSelfHostedUser,
   clearSelfHostedAuth,
 } from '@/common/config/selfHosted';
+import { configService } from '@/common/config/configService';
 import { reportLog } from '@/common/logger/reportLog';
 
 // M6: CSRF removed with legacy webserver — stub functions for compatibility, re-implement in M7
@@ -174,6 +176,9 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
             });
             setStatus('authenticated');
             setReady(true);
+            void configService.syncFromSelfHosted().then((synced) => {
+              if (synced) void mutate('providers');
+            });
             return;
           }
         }
@@ -241,6 +246,9 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
           setStatus('authenticated');
           setReady(true);
           reportLog('INFO', `User ${username} logged in successfully`);
+          void configService.syncFromSelfHosted().then((synced) => {
+            if (synced) void mutate('providers');
+          });
           return { success: true };
         } else if (response.status === 401 || (data && data.code !== 0)) {
           return {

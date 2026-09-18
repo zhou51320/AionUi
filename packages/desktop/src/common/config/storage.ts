@@ -520,6 +520,7 @@ export type ModelSettings = {
   openai_api_mode?: ModelOpenAiApiMode;
   context_limit?: number;
   thought_level?: ModelThoughtLevel;
+  thought_levels?: ModelThoughtLevel[];
 };
 
 export interface IProvider {

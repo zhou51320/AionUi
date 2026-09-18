@@ -56,7 +56,9 @@ import { classifyConversationBusyError } from '../conversationBusyError';
 import { useAionrsMessage } from './useAionrsMessage';
 import type { AionrsModelSelection } from './useAionrsModelSelection';
 import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
-import { detectModelContextLimit } from '@/common/utils/modelCapabilities';
+import { detectModelContextLimit, resolveModelThoughtLevels } from '@/common/utils/modelCapabilities';
+import type { ModelThoughtLevel } from '@/common/config/storage';
+import ReasoningEffortSelector from '@/renderer/components/agent/ReasoningEffortSelector';
 import AionrsModelSelector from './AionrsModelSelector';
 import type { AcpDerivedOption } from '@/renderer/hooks/agent/useAcpConfigOptions';
 
@@ -125,6 +127,7 @@ const AionrsSendBox: React.FC<{
   modelSelection: AionrsModelSelection;
   thoughtLevel?: AcpDerivedOption | null;
   onSetThoughtLevel?: (optionId: string, value: string) => Promise<unknown>;
+  initialThoughtLevel?: string;
   session_mode?: string;
   agent_name?: string;
   teamSendMessage?: (payload: { input: string; files: ChatFileRef[] }) => Promise<void>;
@@ -134,6 +137,7 @@ const AionrsSendBox: React.FC<{
   modelSelection,
   thoughtLevel,
   onSetThoughtLevel,
+  initialThoughtLevel,
   session_mode,
   agent_name,
   teamSendMessage,
@@ -210,6 +214,69 @@ const AionrsSendBox: React.FC<{
   });
   const runtimeMode = runtimeConfig.mode;
   const runtimeThoughtLevel = runtimeConfig.thoughtLevel;
+
+  const currentModelName = current_model?.use_model;
+  const currentModelSettings = currentModelName ? current_model?.model_settings?.[currentModelName] : undefined;
+
+  const availableThoughtLevels = useMemo(() => {
+    if (!currentModelName) return [];
+    return resolveModelThoughtLevels(currentModelName, currentModelSettings);
+  }, [currentModelName, currentModelSettings]);
+
+  const [selectedThoughtLevel, setSelectedThoughtLevel] = useState<string | undefined>(
+    initialThoughtLevel || thoughtLevel?.currentValue || runtimeThoughtLevel?.currentValue
+  );
+
+  useEffect(() => {
+    if (initialThoughtLevel !== undefined) {
+      setSelectedThoughtLevel(initialThoughtLevel);
+    } else if (thoughtLevel?.currentValue !== undefined) {
+      setSelectedThoughtLevel(thoughtLevel.currentValue);
+    } else if (runtimeThoughtLevel?.currentValue !== undefined) {
+      setSelectedThoughtLevel(runtimeThoughtLevel.currentValue);
+    }
+  }, [conversation_id, initialThoughtLevel, thoughtLevel?.currentValue, runtimeThoughtLevel?.currentValue]);
+
+  const effectiveThoughtLevel = useMemo(() => {
+    if (selectedThoughtLevel && availableThoughtLevels.includes(selectedThoughtLevel as ModelThoughtLevel)) {
+      return selectedThoughtLevel as ModelThoughtLevel;
+    }
+    const defaultLevel = currentModelSettings?.thought_level;
+    if (defaultLevel && defaultLevel !== 'auto' && availableThoughtLevels.includes(defaultLevel)) {
+      return defaultLevel;
+    }
+    if (availableThoughtLevels.includes('medium')) return 'medium';
+    return availableThoughtLevels[0];
+  }, [selectedThoughtLevel, availableThoughtLevels, currentModelSettings?.thought_level]);
+
+  const handleThoughtLevelChange = useCallback(
+    async (lvl: ModelThoughtLevel) => {
+      const previousLevel = selectedThoughtLevel;
+      setSelectedThoughtLevel(lvl);
+      try {
+        await ipcBridge.conversation.update.invoke({
+          id: conversation_id,
+          updates: {
+            extra: {
+              thought_level: lvl,
+            } as any,
+          },
+        });
+        if (thoughtLevel?.id && onSetThoughtLevel) {
+          await onSetThoughtLevel(thoughtLevel.id, lvl);
+        } else {
+          Message.success(t('agent.thoughtLevel.switchSuccess', '思考强度切换成功'));
+        }
+      } catch (err) {
+        setSelectedThoughtLevel(previousLevel);
+        console.error('Failed to update thought_level', err);
+        if (!thoughtLevel?.id || !onSetThoughtLevel) {
+          Message.error(t('agent.thoughtLevel.switchFailed', '思考强度切换失败'));
+        }
+      }
+    },
+    [conversation_id, onSetThoughtLevel, selectedThoughtLevel, thoughtLevel?.id, t]
+  );
 
   useEffect(() => {
     if (!runtimeMode?.currentValue) return;
@@ -827,11 +894,20 @@ const AionrsSendBox: React.FC<{
         rightTools={
           <div className='flex items-center gap-8px min-w-0'>
             {!isMobile && (
-              <AionrsModelSelector
-                selection={modelSelection}
-                thoughtLevel={thoughtLevel}
-                onSetThoughtLevel={onSetThoughtLevel}
-              />
+              <>
+                <AionrsModelSelector
+                  selection={modelSelection}
+                  thoughtLevel={null}
+                />
+                {availableThoughtLevels.length > 0 && (
+                  <ReasoningEffortSelector
+                    value={effectiveThoughtLevel}
+                    levels={availableThoughtLevels}
+                    onChange={handleThoughtLevelChange}
+                    compact={isMobile}
+                  />
+                )}
+              </>
             )}
             <AgentModeSelector
               backend='aionrs'
@@ -918,7 +994,7 @@ const AionrsSendBox: React.FC<{
                 {t('team.interruptAndSend')}
               </Button>
             ) : undefined}
-            {tokenUsage ? (
+            {(effectiveContextLimit > 0 || tokenUsage) ? (
               <ContextUsageIndicator
                 tokenUsage={tokenUsage}
                 context_limit={effectiveContextLimit}

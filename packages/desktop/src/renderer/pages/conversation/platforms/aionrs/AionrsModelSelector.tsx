@@ -70,6 +70,7 @@ const AionrsModelSelector: React.FC<{
   }
 
   const { providers, getAvailableModels, handleSelectModel } = selection;
+  const safeProviders = Array.isArray(providers) ? providers : [];
 
   const label = getModelDisplayLabel({
     selected_value: current_model?.use_model,
@@ -86,8 +87,8 @@ const AionrsModelSelector: React.FC<{
   // aionrs models are grouped by provider. Use a composite id (see compositeId)
   // so the shared model list can track selection, and map it back on select.
   const modelGroups: RuntimeSelectorModelGroup[] = [];
-  const modelLookup = new Map<string, { provider: (typeof providers)[number]; modelName: string }>();
-  for (const provider of providers) {
+  const modelLookup = new Map<string, { provider: (typeof safeProviders)[number]; modelName: string }>();
+  for (const provider of safeProviders) {
     const models = getAvailableModels(provider);
     if (!models.length) continue;
     modelGroups.push({

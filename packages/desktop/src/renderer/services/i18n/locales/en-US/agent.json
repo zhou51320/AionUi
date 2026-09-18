@@ -43,7 +43,15 @@
   "thoughtLevel": {
     "label": "Thinking Level",
     "switchSuccess": "Thinking level switched",
-    "switchFailed": "Failed to switch thinking level"
+    "switchFailed": "Failed to switch thinking level",
+    "off": "Off",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "offShort": "Off",
+    "lowShort": "Low",
+    "mediumShort": "Med",
+    "highShort": "High"
   },
   "warmup": {
     "clickToWake": "Click to wake this member"

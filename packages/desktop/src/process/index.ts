@@ -16,6 +16,10 @@ import { app } from 'electron';
 if (app.isPackaged) {
   process.env.PREBUILDS_ONLY = '1';
 }
+// Force .NET executables (such as officecli) to use Windows NLS instead of ICU on Windows 7
+if (process.platform === 'win32') {
+  process.env.DOTNET_SYSTEM_GLOBALIZATION_USENLS = '1';
+}
 import initStorage from './utils/initStorage';
 import './utils/initBridge';
 import './services/i18n'; // Initialize i18n for main process

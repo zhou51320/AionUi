@@ -262,6 +262,13 @@ vi.mock('@arco-design/web-react', () => ({
     success: vi.fn(),
   },
   Tag: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Dropdown: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  Menu: Object.assign(({ children }: { children?: React.ReactNode }) => <>{children}</>, {
+    Item: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    ItemGroup: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    SubMenu: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  }),
   Button: ({
     children,
     onClick,
@@ -278,6 +285,7 @@ vi.mock('@arco-design/web-react', () => ({
 }));
 vi.mock('@icon-park/react', () => ({
   Brain: () => null,
+  Down: () => null,
   MagicHat: () => null,
   Shield: () => null,
 }));

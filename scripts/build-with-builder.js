@@ -723,6 +723,7 @@ try {
       shell: process.platform === 'win32',
       env: {
         ...process.env,
+        NODE_OPTIONS: process.env.NODE_OPTIONS || '--max-old-space-size=8192',
         ELECTRON_BUILDER_ARCH: targetArch,
       },
     });
@@ -769,9 +770,22 @@ try {
   const { resolveAioncoreVersion } = require('./resolveAioncoreVersion.js');
   const projectRoot = path.resolve(__dirname, '..');
   writeGeneratedSentryDsnInclude(projectRoot);
+  const targetPlatform = builderArgs.includes('--win')
+    ? 'win32'
+    : builderArgs.includes('--mac')
+    ? 'darwin'
+    : builderArgs.includes('--linux')
+    ? 'linux'
+    : process.platform;
+  if (targetPlatform === 'win32' && !process.env.AIONUI_BACKEND_LOCAL_BUNDLE_DIR) {
+    const localBundle = path.join(projectRoot, 'resources/bundled-aioncore-local/win32-x64');
+    if (fs.existsSync(localBundle)) {
+      process.env.AIONUI_BACKEND_LOCAL_BUNDLE_DIR = localBundle;
+    }
+  }
   prepareAioncore({
     projectRoot,
-    platform: process.platform,
+    platform: targetPlatform,
     arch: targetArch,
     version: resolveAioncoreVersion(projectRoot),
   });
@@ -871,8 +885,11 @@ try {
     ].find((p) => fs.existsSync(p));
 
     if (candidateOfficecli) {
-      console.log(`📄 Found officecli binary at ${candidateOfficecli}, adding to extraResources`);
-      officecliResourceArg = ` --config.extraResources='[{"from":"${candidateOfficecli.replace(/\\/g, '/')}","to":"officecli.exe"}]'`;
+      console.log(`📄 Found officecli binary at ${candidateOfficecli}`);
+      const targetInResources = path.resolve(__dirname, '../resources/officecli-win-x64.exe');
+      if (candidateOfficecli !== targetInResources) {
+        fs.copyFileSync(candidateOfficecli, targetInResources);
+      }
     }
 
     if (isWin7) {
@@ -884,7 +901,7 @@ try {
     }
   }
 
-  const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${win7DistArg}${officecliResourceArg} ${publishArg}`;
+  const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${win7DistArg} ${publishArg}`;
   try {
     buildWithDmgRetry(builderCommand, targetArch);
   } catch (error) {

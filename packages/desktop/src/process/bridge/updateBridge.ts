@@ -267,12 +267,34 @@ const resolveRepo = (requestRepo?: string): string => {
   return repo || DEFAULT_REPO;
 };
 
-const assertAllowedUrl = async (rawUrl: string) => {
+const assertAllowedUrl = async (rawUrl: string, selfHostedUrl?: string) => {
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
   } catch {
     throw new Error((await getI18n()).t('update.errors.invalidUrl'));
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  const isLocalOrLan =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
+
+  let matchesSelfHosted = false;
+  if (selfHostedUrl) {
+    try {
+      matchesSelfHosted = new URL(selfHostedUrl).hostname.toLowerCase() === hostname;
+    } catch {
+      matchesSelfHosted = false;
+    }
+  }
+
+  if (isLocalOrLan || matchesSelfHosted) {
+    return;
   }
 
   if (parsed.protocol !== 'https:') {
@@ -283,11 +305,11 @@ const assertAllowedUrl = async (rawUrl: string) => {
   }
 };
 
-const fetchWithAllowlistedRedirects = async (rawUrl: string, signal: AbortSignal): Promise<Response> => {
+const fetchWithAllowlistedRedirects = async (rawUrl: string, signal: AbortSignal, selfHostedUrl?: string): Promise<Response> => {
   let current = rawUrl;
 
   for (let i = 0; i <= MAX_REDIRECTS; i++) {
-    await assertAllowedUrl(current);
+    await assertAllowedUrl(current, selfHostedUrl);
 
     const res = await fetch(current, {
       signal,
@@ -483,7 +505,8 @@ const attemptDownload = async (
   downloadId: string,
   url: string,
   file_path: string,
-  abortController: AbortController
+  abortController: AbortController,
+  selfHostedUrl?: string
 ): Promise<DownloadAttempt> => {
   let receivedBytes = 0;
   let totalBytes: number | undefined;
@@ -517,7 +540,7 @@ const attemptDownload = async (
 
   let stream: fs.WriteStream | null = null;
   try {
-    const res = await fetchWithAllowlistedRedirects(url, abortController.signal);
+    const res = await fetchWithAllowlistedRedirects(url, abortController.signal, selfHostedUrl);
 
     if (!res.ok) {
       throw new Error((await getI18n()).t('update.errors.downloadFailed', { status: res.status }));
@@ -593,16 +616,17 @@ const startDownloadInBackground = async (
   url: string,
   file_path: string,
   abortController: AbortController,
-  fallbackUrl?: string
+  fallbackUrl?: string,
+  selfHostedUrl?: string
 ) => {
   const runWithFallback = async (): Promise<DownloadAttempt> => {
-    const primary = await attemptDownload(downloadId, url, file_path, abortController);
+    const primary = await attemptDownload(downloadId, url, file_path, abortController, selfHostedUrl);
     if (primary.ok) return primary;
     if (primary.isAbort) return primary;
     if (!fallbackUrl || fallbackUrl === url) return primary;
 
     try {
-      await assertAllowedUrl(fallbackUrl);
+      await assertAllowedUrl(fallbackUrl, selfHostedUrl);
     } catch (err) {
       // Fallback URL itself is invalid — keep the primary failure result.
       log.warn('[update-download] Fallback URL rejected by allowlist:', err);
@@ -610,7 +634,7 @@ const startDownloadInBackground = async (
     }
 
     log.warn(`[update-download] Primary download failed (${primary.message}). Retrying with fallback URL.`);
-    return attemptDownload(downloadId, fallbackUrl, file_path, abortController);
+    return attemptDownload(downloadId, fallbackUrl, file_path, abortController, selfHostedUrl);
   };
 
   const finalResult = await runWithFallback();
@@ -677,6 +701,86 @@ export function initUpdateBridge(): void {
       try {
         const repo = resolveRepo(params?.repo);
         const currentVersion = app.getVersion();
+        const currentSemver = semver.valid(currentVersion) || semver.coerce(currentVersion)?.version;
+
+        // 1. Check self-hosted backend first if selfHostedUrl or env is present
+        const selfHostedBase = params?.selfHostedUrl || process.env.SELF_HOSTED_BASE;
+        if (selfHostedBase) {
+          try {
+            const checkUrl = `${selfHostedBase.replace(/\/+$/, '')}/api/update/check`;
+            log.info('[manual-update] Checking self-hosted updates:', checkUrl);
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 5000);
+            const res = await fetch(checkUrl, {
+              headers: { 'User-Agent': DEFAULT_USER_AGENT },
+              signal: ctrl.signal,
+            });
+            clearTimeout(tid);
+
+            if (res.ok) {
+              const json = (await res.json()) as {
+                code: number;
+                data?: {
+                  version: string;
+                  name?: string;
+                  body?: string;
+                  pub_date?: string;
+                  filename?: string;
+                  file_size?: number;
+                  download_url: string;
+                } | null;
+              };
+
+              if (json && json.code === 0) {
+                if (!json.data) {
+                  return { success: true, data: { currentVersion, updateAvailable: false } };
+                }
+
+                const sh = json.data;
+                const shSemver = semver.valid(sh.version) || semver.coerce(sh.version)?.version;
+                const updateAvailable = Boolean(currentSemver && shSemver && semver.gt(shSemver, currentSemver));
+
+                const assetName = sh.filename || `AionUi-update-${sh.version}.exe`;
+                const asset: GitHubReleaseAsset = {
+                  name: assetName,
+                  url: sh.download_url,
+                  fallbackUrl: sh.download_url,
+                  size: sh.file_size || 0,
+                };
+
+                const latest: UpdateReleaseInfo = {
+                  tagName: `v${sh.version}`,
+                  version: sh.version,
+                  name: sh.name || `AionUi v${sh.version}`,
+                  body: sh.body || '',
+                  htmlUrl: sh.download_url,
+                  publishedAt: sh.pub_date,
+                  prerelease: false,
+                  draft: false,
+                  assets: [asset],
+                  recommendedAsset: asset,
+                };
+
+                log.info('[manual-update] Self-hosted update checked:', {
+                  version: sh.version,
+                  currentVersion,
+                  updateAvailable,
+                });
+
+                return {
+                  success: true,
+                  data: {
+                    currentVersion,
+                    updateAvailable,
+                    latest,
+                  },
+                };
+              }
+            }
+          } catch (shErr) {
+            log.warn('[manual-update] Self-hosted check failed, falling back to CDN:', shErr);
+          }
+        }
 
         // EN: Versioning note
         // Update comparisons are pure semver: `app.getVersion()` (packaged app version) vs the CDN
@@ -694,7 +798,6 @@ export function initUpdateBridge(): void {
         const manifest = await fetchCdnManifest();
         const latest = mapCdnManifestToRelease(manifest, repo);
 
-        const currentSemver = semver.valid(currentVersion) || semver.coerce(currentVersion)?.version;
         if (!currentSemver || !latest) {
           return { success: true, data: { currentVersion, updateAvailable: false } };
         }
@@ -733,9 +836,9 @@ export function initUpdateBridge(): void {
         // EN: Only allowlisted hosts (CDN + GitHub release hosts) are permitted;
         // each redirect hop is re-validated against the allowlist.
         // 中文：仅允许白名单内的域名（CDN + GitHub release 相关），并手动处理重定向，每一跳都校验白名单。
-        await assertAllowedUrl(params.url);
+        await assertAllowedUrl(params.url, params.selfHostedUrl);
         if (params.fallbackUrl) {
-          await assertAllowedUrl(params.fallbackUrl);
+          await assertAllowedUrl(params.fallbackUrl, params.selfHostedUrl);
         }
 
         const downloadId = params.downloadId || uuid();
@@ -757,7 +860,7 @@ export function initUpdateBridge(): void {
         manualDownloadKeysById.set(downloadId, activeKey);
 
         // Start background download, but return immediately so the UI stays responsive.
-        void startDownloadInBackground(downloadId, params.url, targetPath, abortController, params.fallbackUrl);
+        void startDownloadInBackground(downloadId, params.url, targetPath, abortController, params.fallbackUrl, params.selfHostedUrl);
 
         return Promise.resolve({ success: true, data: { downloadId, file_path: targetPath } });
       } catch (err: unknown) {

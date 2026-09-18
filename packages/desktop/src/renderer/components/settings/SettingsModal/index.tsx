@@ -12,7 +12,7 @@ import { type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
 import { useExtI18n } from '@/renderer/hooks/system/useExtI18n';
 import { useExtensionSettingsTabs } from '@/renderer/hooks/system/useExtensionSettingsTabs';
 import { Tabs } from '@arco-design/web-react';
-import { Computer, Earth, Info, LinkCloud, Puzzle, Toolkit } from '@icon-park/react';
+import { Computer, Earth, Info, LinkCloud, Puzzle, Speed, Toolkit } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -188,12 +188,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onCancel, defaul
   const menuItems = useMemo((): Array<{ key: SettingTab; label: string; icon: React.ReactNode }> => {
     type MenuItem = { key: string; label: string; icon: React.ReactNode };
 
-    // Modal built-in tabs (subset — no display/agent route pages)
+    // Modal built-in tabs
     const builtinItems: MenuItem[] = [
       {
         key: 'model',
         label: t('settings.model'),
         icon: <LinkCloud theme='outline' size='20' fill={iconColors.secondary} />,
+      },
+      {
+        key: 'agent',
+        label: t('settings.agentsAssistant', { defaultValue: 'Agents助手' }),
+        icon: <Speed theme='outline' size='20' fill={iconColors.secondary} />,
       },
       {
         key: 'tools',

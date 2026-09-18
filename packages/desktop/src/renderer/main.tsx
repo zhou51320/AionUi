@@ -251,10 +251,11 @@ const RuntimeFailureDialogs: React.FC = () => {
 
     const offStatus = ipcBridge.runtime.statusChanged.on((event: IRuntimeStatusEvent) => {
       // Reconcile install-integrity failures and node ready events (spec 8/13.4).
-      if (
-        (event.phase === 'failed' && isInstallationIntegrityFailure(event.failure_kind)) ||
-        (event.phase === 'ready' && event.resource === 'node')
-      ) {
+      // Node is optional and handled locally/gracefully on Win7/intranet; do not pop up fatal blocking dialogs.
+      if (event.resource === 'node') {
+        return;
+      }
+      if (event.phase === 'failed' && isInstallationIntegrityFailure(event.failure_kind)) {
         reconciler.handleStatus(event);
         return;
       }

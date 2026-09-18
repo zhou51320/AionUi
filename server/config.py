@@ -13,6 +13,6 @@ class Config:
         'UPLOAD_FOLDER',
         os.path.join(BASE_DIR, 'uploads')
     )
-    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB max file upload
+    MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500MB max file upload
     JWT_EXPIRATION_DAYS = 7
     FLASK_ADMIN_SWATCH = 'cerulean'

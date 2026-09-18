@@ -129,9 +129,12 @@ function buildBuiltinImageGenerationServer(
   config?: ImageGenerationModelSetting
 ): McpImportServer {
   const scriptPath = getBuiltinMcpScriptPath('builtin-mcp-image-gen');
-  const env = resolution.ok ? resolution.env : {};
+  const isWin = process.platform === 'win32';
+  const baseEnv = resolution.ok ? resolution.env : {};
+  const env = isWin ? { ...baseEnv, ELECTRON_RUN_AS_NODE: '1' } : baseEnv;
+  const command = isWin ? process.execPath : 'node';
   const serverConfig = {
-    command: 'node',
+    command,
     args: [scriptPath],
     env,
   };
@@ -143,7 +146,7 @@ function buildBuiltinImageGenerationServer(
     builtin: true,
     transport: {
       type: 'stdio',
-      command: 'node',
+      command,
       args: [scriptPath],
       env,
     },
@@ -154,15 +157,22 @@ function buildBuiltinImageGenerationServer(
 function areStringArraysEqual(left?: string[], right?: string[]): boolean {
   const leftValue = left || [];
   const rightValue = right || [];
-  return leftValue.length === rightValue.length && leftValue.every((item, index) => item === rightValue[index]);
+  if (leftValue.length !== rightValue.length) {
+    return false;
+  }
+  return leftValue.every((value, index) => value === rightValue[index]);
 }
 
-function areStringRecordsEqual(left?: Record<string, string>, right?: Record<string, string>): boolean {
-  const leftValue = left || {};
-  const rightValue = right || {};
-  const leftKeys = Object.keys(leftValue).toSorted();
-  const rightKeys = Object.keys(rightValue).toSorted();
-  return areStringArraysEqual(leftKeys, rightKeys) && leftKeys.every((key) => leftValue[key] === rightValue[key]);
+function areStringRecordsEqual(
+  left?: Record<string, string>,
+  right?: Record<string, string>
+): boolean {
+  const leftKeys = Object.keys(left || {});
+  const rightKeys = Object.keys(right || {});
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  return leftKeys.every((key) => left?.[key] === right?.[key]);
 }
 
 function isSameStdioTransport(left: IMcpServer['transport'], right: IMcpServer['transport']): boolean {
@@ -177,9 +187,13 @@ function isSameStdioTransport(left: IMcpServer['transport'], right: IMcpServer['
 
 function buildBuiltinBrowserServer(): McpImportServer {
   const scriptPath = getBuiltinMcpScriptPath(BUILTIN_BROWSER_SCRIPT);
+  const isWin = process.platform === 'win32';
+  const command = isWin ? process.execPath : 'node';
+  const env = isWin ? { ELECTRON_RUN_AS_NODE: '1' } : undefined;
   const serverConfig = {
-    command: 'node',
+    command,
     args: [scriptPath],
+    ...(env ? { env } : {}),
   };
 
   return {
@@ -193,8 +207,9 @@ function buildBuiltinBrowserServer(): McpImportServer {
     builtin: true,
     transport: {
       type: 'stdio',
-      command: serverConfig.command,
+      command,
       args: serverConfig.args,
+      ...(env ? { env } : {}),
     },
     original_json: JSON.stringify({ mcpServers: { [BUILTIN_BROWSER_MCP_NAME]: serverConfig } }, null, 2),
   };

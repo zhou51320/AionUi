@@ -23,14 +23,17 @@ description: "Use this skill to build a multi-element Excel dashboard — Dashbo
 
 A dashboard is not "a spreadsheet with charts". It is a composition: **one Dashboard sheet the user lands on** with formula-driven KPI cards, cell-range-linked charts, sparklines, and semantic conditional formatting. Everything else (raw data, aggregations) is upstream infrastructure the user should never need to open. This skill teaches the composition pattern. Everything about the xlsx engine — cells, formulas, batch JSON, shell quoting, validate, HTML preview — comes from `officecli-xlsx` and is not re-taught here.
 
-## Setup
+## Setup / Executable Resolution (Pre-bundled in AionUi)
 
-If `officecli` is missing:
-
-- **macOS / Linux**: `curl -fsSL https://d.officecli.ai/install.sh | bash`
-- **Windows (PowerShell)**: `irm https://d.officecli.ai/install.ps1 | iex`
-
-Verify with `officecli --version` (open a new terminal if PATH hasn't picked up). If install fails, download a binary from https://github.com/iOfficeAI/OfficeCLI/releases.
+`officecli` is pre-bundled in AionUi. **Do not run manual install scripts.** Locate and invoke `officecli` in the following order:
+1. Direct command if available in PATH: `officecli` (or `officecli.exe`)
+2. In AionUi's pre-bundled resources directory on Windows:
+   - Check `$env:LOCALAPPDATA\Programs\AionUi\resources\officecli.exe`
+   - Check `(Get-Process -Name AionUi -ErrorAction SilentlyContinue).Path | Split-Path | Join-Path -ChildPath "resources\officecli.exe"`
+   - Check `.\resources\officecli.exe` or `..\resources\officecli.exe` (relative to current directory)
+   - Fallback: `$env:LOCALAPPDATA\OfficeCli\officecli.exe`
+   If found, invoke directly via `& "<resolved-path>" <args>` or set an alias `Set-Alias officecli "<resolved-path>"`.
+3. macOS / Linux: `/Applications/AionUi.app/Contents/Resources/officecli` or `~/.local/bin/officecli`
 
 ## ⚠️ Help-First Rule
 

@@ -37,6 +37,7 @@ export interface UpdateCheckRequest {
   includePrerelease?: boolean;
   /** Defaults to iOfficeAI/AionUi when omitted */
   repo?: string;
+  selfHostedUrl?: string;
 }
 
 export interface UpdateDownloadRequest {
@@ -46,6 +47,7 @@ export interface UpdateDownloadRequest {
   /** Fallback URL tried when the primary URL fails (e.g. CDN down). */
   fallbackUrl?: string;
   file_name?: string;
+  selfHostedUrl?: string;
 }
 
 export interface UpdateDownloadResult {

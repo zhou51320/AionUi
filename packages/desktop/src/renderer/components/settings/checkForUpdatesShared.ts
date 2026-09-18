@@ -6,6 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import type { UpdateReleaseInfo } from '@/common/update/updateTypes';
+import { getSelfHostedBaseUrl } from '@/common/config/selfHosted';
 import semver from 'semver';
 
 /**
@@ -73,7 +74,11 @@ export const runUpdateCheck = async (opts: {
       console.warn('Auto-update check error, using manual mode:', error);
     }
 
-    const res = await ipcBridge.update.check.invoke({ includePrerelease: opts.includePrerelease });
+    const selfHostedUrl = getSelfHostedBaseUrl();
+    const res = await ipcBridge.update.check.invoke({
+      includePrerelease: opts.includePrerelease,
+      selfHostedUrl,
+    });
     if (!res?.success) {
       throw new Error(res?.msg || opts.checkFailedLabel);
     }

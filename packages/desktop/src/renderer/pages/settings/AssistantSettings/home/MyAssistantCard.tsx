@@ -11,6 +11,7 @@ import { Button, Dropdown, Menu, Switch, Tooltip } from '@arco-design/web-react'
 import { Attention, MoreOne } from '@icon-park/react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { exportResourceArchive } from '@/renderer/utils/exportResource';
 
 type MyAssistantCardProps = {
   assistant: AssistantListItem;
@@ -43,11 +44,21 @@ const MyAssistantCard: React.FC<MyAssistantCardProps> = ({
     <Menu
       onClickMenuItem={(key) => {
         if (key === 'edit') onOpenDetail(assistant);
+        if (key === 'export') {
+          void exportResourceArchive({
+            type: 'assistant',
+            name: assistant.name_i18n?.[localeKey] || assistant.name,
+            data: assistant,
+          });
+        }
         if (key === 'delete') onDelete(assistant);
       }}
     >
       <Menu.Item key='edit'>
         <span data-testid={`menu-edit-${assistant.id}`}>{t('common.settings', { defaultValue: 'Settings' })}</span>
+      </Menu.Item>
+      <Menu.Item key='export'>
+        <span data-testid={`menu-export-${assistant.id}`}>{t('common.export', { defaultValue: '导出' })}</span>
       </Menu.Item>
       {canDelete ? (
         <Menu.Item key='delete'>

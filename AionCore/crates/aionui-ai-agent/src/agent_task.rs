@@ -733,12 +733,23 @@ mod aionrs_config_option_tests {
     async fn aionrs_set_config_option_rejects_unavailable_option() {
         let instance = aionrs_instance().await;
 
-        let error = instance.set_config_option("thought_level", "high").await.unwrap_err();
+        let error = instance.set_config_option("unknown_option", "value").await.unwrap_err();
 
         assert!(
-            matches!(&error, AgentError::BadRequest(message) if message == "Config option 'thought_level' is not available"),
+            matches!(&error, AgentError::BadRequest(message) if message == "Config option 'unknown_option' is not available"),
             "unexpected error: {error:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn aionrs_set_config_option_accepts_thought_level() {
+        let instance = aionrs_instance().await;
+
+        let response = instance.set_config_option("thought_level", "high").await.unwrap();
+        assert_eq!(response.confirmation, aionui_api_types::ConfigOptionConfirmation::Observed);
+        let options = response.config_options.unwrap();
+        let thought_opt = options.iter().find(|o| o.id == "thought_level").unwrap();
+        assert_eq!(thought_opt.current_value.as_deref(), Some("high"));
     }
 }
 

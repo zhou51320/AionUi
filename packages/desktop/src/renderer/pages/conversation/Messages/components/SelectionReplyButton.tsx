@@ -10,7 +10,9 @@ import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useOptionalPreviewContext } from '@/renderer/pages/conversation/Preview/context/PreviewContext';
 import { openExternalUrl } from '@/renderer/utils/platform';
 import { resolveSelectionHttpUrl } from '@/renderer/utils/url';
-import { Browser, Earth, Quote } from '@icon-park/react';
+import { Browser, Copy, Earth, Quote } from '@icon-park/react';
+import { copyText } from '@/renderer/utils/ui/clipboard';
+import { Message } from '@arco-design/web-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -183,6 +185,22 @@ const SelectionReplyButton: React.FC<{ messages: TMessage[] }> = ({ messages }) 
         color: 'var(--brand)',
       }}
     >
+      <div
+        className={itemClassName}
+        onMouseDown={async (e) => {
+          e.preventDefault();
+          try {
+            await copyText(pos.text);
+            Message.success(t('common.copySuccess', { defaultValue: '已复制' }));
+          } catch {
+            Message.error(t('common.copyFailed', { defaultValue: '复制失败' }));
+          }
+          dismiss();
+        }}
+      >
+        <Copy theme='outline' size='14' fill='currentColor' />
+        <span className='text-12px font-medium'>{t('common.copy', { defaultValue: '复制' })}</span>
+      </div>
       <div
         className={itemClassName}
         onMouseDown={(e) => {

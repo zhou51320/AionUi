@@ -2,7 +2,7 @@ import { ipcBridge } from '@/common';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { Button, Checkbox, Message, Modal } from '@arco-design/web-react';
-import { Delete, Help, Lightning, Puzzle } from '@icon-park/react';
+import { Delete, Download, Help, Lightning, Puzzle } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -14,6 +14,8 @@ import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
 import { AionSearchInput } from '@/renderer/components/base';
 import { formatDateTime } from '@/renderer/services/i18n/format';
 import { buildSkillImportNotice, getSkillImportErrorMessage } from './skillImportMessages';
+import MarketResourceList from '@/renderer/components/market/MarketResourceList';
+import { exportResourceArchive } from '@/renderer/utils/exportResource';
 
 // Skill 信息类型 / Skill info type
 interface SkillInfo {
@@ -129,11 +131,12 @@ interface SkillsHubSettingsProps {
   withWrapper?: boolean;
 }
 
-type SkillsTab = 'custom' | 'official';
+type SkillsTab = 'custom' | 'official' | 'market';
 
 const getSkillsTabFromState = (state: unknown): SkillsTab => {
-  if (typeof state === 'object' && state !== null && 'skillsTab' in state && state.skillsTab === 'official') {
-    return 'official';
+  if (typeof state === 'object' && state !== null && 'skillsTab' in state) {
+    if (state.skillsTab === 'official') return 'official';
+    if (state.skillsTab === 'market') return 'market';
   }
   return 'custom';
 };
@@ -873,6 +876,21 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
                 <div className='shrink-0 sm:self-center flex items-center justify-end gap-10px mt-12px sm:mt-0 ps-4px'>
                   <SkillUsedByStack assistants={getAssistantsUsingSkill(skill.name, assistantCatalog ?? [])} />
                   <button
+                    data-testid={`btn-export-${normalizeTestId(skill.name)}`}
+                    className='p-8px hover:bg-fill-2 hover:text-t-primary text-t-tertiary rd-6px outline-none flex items-center justify-center border border-transparent cursor-pointer transition-colors shadow-sm bg-base sm:bg-transparent sm:shadow-none opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity'
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void exportResourceArchive({
+                        type: 'skill',
+                        name: skill.name,
+                        location: skill.location,
+                      });
+                    }}
+                    title={t('common.export', { defaultValue: '导出' })}
+                  >
+                    <Download size={16} />
+                  </button>
+                  <button
                     data-testid={`btn-delete-${normalizeTestId(skill.name)}`}
                     className='p-8px hover:bg-danger-1 hover:text-danger-6 text-t-tertiary rd-6px outline-none flex items-center justify-center border border-transparent cursor-pointer transition-colors shadow-sm bg-base sm:bg-transparent sm:shadow-none opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity'
                     onClick={(e) => {
@@ -1025,14 +1043,20 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
             label: t('settings.skillsHub.tabOfficial', { defaultValue: 'Official' }),
             count: officialSkills.length + extensionSkills.length + builtinAutoSkills.length,
           },
+          {
+            key: 'market',
+            label: t('settings.skillsHub.tabMarket', { defaultValue: '市场' }),
+          },
         ]}
         activeTab={activeTab}
         onTabChange={(key) => {
-          setActiveTab(key as 'custom' | 'official');
+          setActiveTab(key as SkillsTab);
           exitBatchMode();
         }}
       />
-      {activeTab === 'custom' ? customPane : officialPane}
+      {activeTab === 'custom' ? customPane : activeTab === 'official' ? officialPane : (
+        <MarketResourceList category='skill' onInstalled={() => void fetchData()} />
+      )}
     </div>
   );
 

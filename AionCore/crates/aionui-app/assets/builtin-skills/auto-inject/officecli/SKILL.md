@@ -23,19 +23,17 @@ description: Create, analyze, proofread, and modify Office documents (.docx, .xl
 
 AI-friendly CLI for .docx, .xlsx, .pptx. Single binary, no dependencies, no Office installation needed.
 
-## Install
+## OfficeCLI Executable Resolution (Pre-bundled in AionUi)
 
-If `officecli` is not installed:
-
-```bash
-# macOS / Linux
-curl -fsSL https://d.officecli.ai/install.sh | bash
-
-# Windows (PowerShell)
-irm https://d.officecli.ai/install.ps1 | iex
-```
-
-Verify with `officecli --version`. If still not found after install, open a new terminal.
+`officecli` is pre-bundled in AionUi. **Do not run manual install scripts.** Locate and invoke `officecli` in the following order:
+1. Direct command if available in PATH: `officecli` (or `officecli.exe`)
+2. In AionUi's pre-bundled resources directory on Windows:
+   - Check `$env:LOCALAPPDATA\Programs\AionUi\resources\officecli.exe`
+   - Check `(Get-Process -Name AionUi -ErrorAction SilentlyContinue).Path | Split-Path | Join-Path -ChildPath "resources\officecli.exe"`
+   - Check `.\resources\officecli.exe` or `..\resources\officecli.exe` (relative to current directory)
+   - Fallback: `$env:LOCALAPPDATA\OfficeCli\officecli.exe`
+   If found, invoke directly via `& "<resolved-path>" <args>` or set an alias `Set-Alias officecli "<resolved-path>"`.
+3. macOS / Linux: `/Applications/AionUi.app/Contents/Resources/officecli` or `~/.local/bin/officecli`
 
 ---
 

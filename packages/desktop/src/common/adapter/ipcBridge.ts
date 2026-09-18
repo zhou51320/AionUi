@@ -2504,3 +2504,41 @@ export const sidebar = {
     (p) => `/api/sidebar/archived/project/${encodeURIComponent(p.project_id)}`
   ),
 };
+
+export interface InstallMarketResourceParams {
+  id: number;
+  filename: string;
+  category: string;
+  downloadUrl: string;
+  token?: string;
+}
+
+export interface InstallMarketResourceResult {
+  success: boolean;
+  message: string;
+  data?: unknown;
+}
+
+export interface ExportMarketResourceParams {
+  type: 'skill' | 'assistant' | 'plugin';
+  name: string;
+  location?: string;
+  data?: unknown;
+}
+
+export interface ExportMarketResourceResult {
+  success: boolean;
+  canceled?: boolean;
+  filePath?: string;
+  error?: string;
+  base64Data?: string;
+}
+
+export const market = {
+  installResource: bridge.buildProvider<InstallMarketResourceResult, InstallMarketResourceParams>(
+    'market.installResource'
+  ),
+  exportResource: bridge.buildProvider<ExportMarketResourceResult, ExportMarketResourceParams>(
+    'market.exportResource'
+  ),
+};

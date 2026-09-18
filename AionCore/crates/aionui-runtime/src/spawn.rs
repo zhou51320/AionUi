@@ -294,7 +294,9 @@ fn configure_platform_spawn(cmd: &mut Command) {
 }
 
 #[cfg(not(unix))]
-fn configure_platform_spawn(_cmd: &mut Command) {}
+fn configure_platform_spawn(cmd: &mut Command) {
+    cmd.env("DOTNET_SYSTEM_GLOBALIZATION_USENLS", "1");
+}
 
 #[cfg(unix)]
 fn force_kill_process_tree(pid: u32, process_group_id: Option<u32>) -> io::Result<()> {
