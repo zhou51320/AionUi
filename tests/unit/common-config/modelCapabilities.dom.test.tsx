@@ -386,11 +386,10 @@ describe('resolveModelThoughtLevels', () => {
     ).toEqual(['off', 'medium']);
   });
 
-  it('auto-detects reasoning models and returns full levels', () => {
-    expect(resolveModelThoughtLevels('deepseek-r1')).toEqual(['off', 'low', 'medium', 'high']);
-    expect(resolveModelThoughtLevels('o1-mini')).toEqual(['off', 'low', 'medium', 'high']);
-    expect(resolveModelThoughtLevels('o3-mini')).toEqual(['off', 'low', 'medium', 'high']);
-    expect(resolveModelThoughtLevels('claude-3-7-sonnet')).toEqual(['off', 'low', 'medium', 'high']);
+  it('requires explicit model settings instead of guessing from the model name', () => {
+    expect(resolveModelThoughtLevels('deepseek-r1')).toEqual([]);
+    expect(resolveModelThoughtLevels('o1-mini')).toEqual([]);
+    expect(resolveModelThoughtLevels('claude-3-7-sonnet')).toEqual([]);
   });
 
   it('returns empty list for non-reasoning models without config', () => {

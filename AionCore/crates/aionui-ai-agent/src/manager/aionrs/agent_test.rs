@@ -43,6 +43,7 @@ fn make_test_config() -> AionrsResolvedConfig {
         prompt_dump_dir: None,
         context_limit: None,
         thought_level: None,
+        thought_levels: None,
     }
 }
 

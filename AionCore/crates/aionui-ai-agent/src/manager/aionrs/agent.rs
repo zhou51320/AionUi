@@ -138,6 +138,8 @@ pub struct AionrsAgentManager {
     context_limit: Option<usize>,
     /// Configured thought level / reasoning effort.
     thought_level: RwLock<Option<String>>,
+    /// Explicitly enabled reasoning effort levels for the selected model.
+    thought_levels: Option<Vec<String>>,
 }
 
 impl Drop for AionrsAgentManager {
@@ -333,6 +335,7 @@ impl AionrsAgentManager {
             context_cache,
             context_limit: config_extra.context_limit,
             thought_level: RwLock::new(config_extra.thought_level),
+            thought_levels: config_extra.thought_levels,
         })
     }
 
@@ -650,13 +653,16 @@ impl AionrsAgentManager {
 
     pub async fn config_options(&self) -> Result<GetConfigOptionsResponse, AgentError> {
         let current_mode = self.approval_manager.current_mode();
-        let current_thought = self.thought_level().unwrap_or_else(|| "medium".to_owned());
-        Ok(GetConfigOptionsResponse {
-            config_options: vec![
-                aionrs_mode_config_option(current_mode),
-                aionrs_thought_level_config_option(current_thought),
-            ],
-        })
+        let mut config_options = vec![aionrs_mode_config_option(current_mode)];
+        if let Some(levels) = self.thought_levels.as_ref().filter(|levels| !levels.is_empty()) {
+            let current_thought = self
+                .thought_level()
+                .or_else(|| levels.iter().find(|level| level.as_str() == "medium").cloned())
+                .or_else(|| levels.first().cloned())
+                .unwrap_or_else(|| "off".to_owned());
+            config_options.push(aionrs_thought_level_config_option(current_thought, levels));
+        }
+        Ok(GetConfigOptionsResponse { config_options })
     }
 
     pub fn context_cache_stats(&self) -> super::context_cache::CacheStats {
@@ -690,6 +696,13 @@ impl AionrsAgentManager {
         }
 
         if option_id == AIONRS_THOUGHT_LEVEL_OPTION_ID || option_id == "reasoning_effort" || option_id == "effort" {
+            if let Some(levels) = self.thought_levels.as_ref()
+                && !levels.iter().any(|level| level == value)
+            {
+                return Err(AgentError::bad_request(format!(
+                    "Value '{value}' is not selectable for config option '{option_id}'"
+                )));
+            }
             let effort = match value {
                 "low" | "medium" | "high" => Some(value.to_string()),
                 "off" => None,
@@ -732,7 +745,7 @@ fn is_aionrs_session_mode(s: &str) -> bool {
     matches!(s, "default" | "auto_edit" | "yolo")
 }
 
-fn aionrs_thought_level_config_option(current_value: String) -> AcpConfigOptionDto {
+fn aionrs_thought_level_config_option(current_value: String, levels: &[String]) -> AcpConfigOptionDto {
     AcpConfigOptionDto {
         id: AIONRS_THOUGHT_LEVEL_OPTION_ID.to_owned(),
         name: Some("Reasoning Effort".to_owned()),
@@ -741,12 +754,10 @@ fn aionrs_thought_level_config_option(current_value: String) -> AcpConfigOptionD
         category: Some("thought_level".to_owned()),
         option_type: "select".to_owned(),
         current_value: Some(current_value),
-        options: vec![
-            aionrs_mode_select_option("off", "Off"),
-            aionrs_mode_select_option("low", "Low"),
-            aionrs_mode_select_option("medium", "Medium"),
-            aionrs_mode_select_option("high", "High"),
-        ],
+        options: levels
+            .iter()
+            .map(|level| aionrs_mode_select_option(level, level))
+            .collect(),
     }
 }
 

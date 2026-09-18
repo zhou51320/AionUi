@@ -131,8 +131,8 @@ export const updateModelSettings = (
  * Resolve the list of supported reasoning/thought levels for a model.
  * If explicitly configured in model settings (thought_levels), uses that list.
  * Otherwise, if legacy thought_level is configured, includes it along with 'off'.
- * Otherwise, if the model is detected to support reasoning, returns standard levels ['off', 'low', 'medium', 'high'].
- * Otherwise returns empty list [].
+ * Models must explicitly opt in through model settings. A name-based guess can
+ * expose a selector for providers that do not accept reasoning parameters.
  */
 export const resolveModelThoughtLevels = (
   modelName: string,
@@ -143,9 +143,6 @@ export const resolveModelThoughtLevels = (
   }
   if (modelSettings?.thought_level && modelSettings.thought_level !== 'auto') {
     return ['off', modelSettings.thought_level];
-  }
-  if (detectModelThoughtSupport(modelName)) {
-    return ['off', 'low', 'medium', 'high'];
   }
   return [];
 };

@@ -190,7 +190,8 @@ pub(super) async fn build(
     let thought_level = overrides
         .thought_level
         .clone()
-        .or_else(|| model_overrides.thought_level.clone());
+        .or_else(|| model_overrides.thought_level.clone())
+        .or_else(|| default_thought_level(model_overrides.thought_levels.as_deref()));
 
     let config = AionrsResolvedConfig {
         provider,
@@ -212,6 +213,7 @@ pub(super) async fn build(
         prompt_dump_dir: crate::dev_prompt_dump::dump_dir_for_data_dir(&deps.data_dir, deps.dump_prompts),
         context_limit,
         thought_level,
+        thought_levels: model_overrides.thought_levels,
     };
 
     if let Some(system_prompt) = config.system_prompt.as_deref()
@@ -504,6 +506,17 @@ pub(crate) struct ModelCompatOverrides {
     pub(crate) openai_api_mode: Option<OpenAiApiMode>,
     pub(crate) context_limit: Option<usize>,
     pub(crate) thought_level: Option<String>,
+    pub(crate) thought_levels: Option<Vec<String>>,
+}
+
+fn default_thought_level(levels: Option<&[String]>) -> Option<String> {
+    let levels = levels.filter(|levels| !levels.is_empty())?;
+    levels
+        .iter()
+        .find(|level| level.as_str() == "medium")
+        .or_else(|| levels.iter().find(|level| level.as_str() != "off"))
+        .or_else(|| levels.first())
+        .cloned()
 }
 
 pub(crate) fn resolve_model_compat_overrides(
@@ -528,6 +541,7 @@ pub(crate) fn resolve_model_compat_overrides(
         }),
         context_limit: settings.context_limit,
         thought_level: settings.thought_level.clone(),
+        thought_levels: settings.thought_levels.clone(),
     })
 }
 

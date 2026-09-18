@@ -169,6 +169,8 @@ pub struct AionrsResolvedConfig {
     pub context_limit: Option<usize>,
     /// Reasoning effort or thought level (off, low, medium, high).
     pub thought_level: Option<String>,
+    /// Explicitly enabled reasoning effort levels for the selected model.
+    pub thought_levels: Option<Vec<String>>,
 }
 
 #[cfg(test)]

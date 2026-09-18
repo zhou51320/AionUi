@@ -666,6 +666,7 @@ mod aionrs_config_option_tests {
             prompt_dump_dir: None,
             context_limit: None,
             thought_level: None,
+            thought_levels: Some(vec!["off".into(), "high".into()]),
         }
     }
 
@@ -746,7 +747,10 @@ mod aionrs_config_option_tests {
         let instance = aionrs_instance().await;
 
         let response = instance.set_config_option("thought_level", "high").await.unwrap();
-        assert_eq!(response.confirmation, aionui_api_types::ConfigOptionConfirmation::Observed);
+        assert_eq!(
+            response.confirmation,
+            aionui_api_types::ConfigOptionConfirmation::Observed
+        );
         let options = response.config_options.unwrap();
         let thought_opt = options.iter().find(|o| o.id == "thought_level").unwrap();
         assert_eq!(thought_opt.current_value.as_deref(), Some("high"));
