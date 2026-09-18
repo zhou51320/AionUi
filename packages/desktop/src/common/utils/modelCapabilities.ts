@@ -108,8 +108,12 @@ export const updateModelSettings = (
 
   for (const modelId of modelIds) {
     const isAutoLimit = contextLimit === undefined || contextLimit === 'auto' || (typeof contextLimit === 'number' && contextLimit <= 0);
-    const hasCustomLevels = Array.isArray(thoughtLevels) && thoughtLevels.length > 0;
-    const isAutoThought = (thoughtLevel === undefined || thoughtLevel === 'auto') && !hasCustomLevels;
+    // `undefined` means that the user left reasoning capability detection on
+    // automatic. An explicitly supplied empty array is different: it means
+    // the user intentionally disabled all reasoning levels and must survive a
+    // round-trip through the settings editor.
+    const hasThoughtLevels = Array.isArray(thoughtLevels);
+    const isAutoThought = (thoughtLevel === undefined || thoughtLevel === 'auto') && !hasThoughtLevels;
     if (imageInput === 'auto' && openAiApiMode === 'auto' && isAutoLimit && isAutoThought) {
       delete next[modelId];
       continue;
@@ -120,7 +124,7 @@ export const updateModelSettings = (
     if (openAiApiMode !== 'auto') settings.openai_api_mode = openAiApiMode;
     if (!isAutoLimit && typeof contextLimit === 'number') settings.context_limit = contextLimit;
     if (!isAutoThought && thoughtLevel && thoughtLevel !== 'auto') settings.thought_level = thoughtLevel;
-    if (hasCustomLevels) settings.thought_levels = thoughtLevels as ModelThoughtLevel[];
+    if (hasThoughtLevels) settings.thought_levels = thoughtLevels as ModelThoughtLevel[];
     next[modelId] = settings;
   }
 

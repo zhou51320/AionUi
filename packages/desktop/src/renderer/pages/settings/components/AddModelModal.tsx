@@ -29,6 +29,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     const [imageInput, setImageInput] = useState<ModelImageInputChoice>('auto');
     const [openAiApiMode, setOpenAiApiMode] = useState<ModelOpenAiApiModeChoice>('auto');
     const [thoughtLevels, setThoughtLevels] = useState<ModelThoughtLevelChoice[]>([]);
+    const [thoughtLevelsConfigured, setThoughtLevelsConfigured] = useState(false);
     const [thoughtLevel, setThoughtLevel] = useState<ModelThoughtLevelChoice>('auto');
     const [contextMode, setContextMode] = useState<'auto' | 'custom'>('auto');
     const [customContextLimit, setCustomContextLimit] = useState<number | undefined>(undefined);
@@ -66,12 +67,19 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       const savedThoughtLevels = settings?.thought_levels;
       if (savedThoughtLevels && savedThoughtLevels.length > 0) {
         setThoughtLevels(savedThoughtLevels as ModelThoughtLevelChoice[]);
+        setThoughtLevelsConfigured(true);
+      } else if (Array.isArray(savedThoughtLevels)) {
+        setThoughtLevels([]);
+        setThoughtLevelsConfigured(true);
       } else if (settings?.thought_level && settings.thought_level !== 'auto') {
         setThoughtLevels([settings.thought_level as ModelThoughtLevelChoice]);
+        setThoughtLevelsConfigured(true);
       } else if (editingModel && detectModelThoughtSupport(editingModel)) {
-        setThoughtLevels(['off', 'low', 'medium', 'high']);
+        setThoughtLevels([]);
+        setThoughtLevelsConfigured(false);
       } else {
         setThoughtLevels([]);
+        setThoughtLevelsConfigured(false);
       }
       setThoughtLevel(settings?.thought_level ?? 'auto');
       setModelProtocol(editingModel ? (data?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
@@ -100,7 +108,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
           showOpenAiApiMode ? openAiApiMode : 'auto',
           effectiveContextLimit,
           thoughtLevel,
-          thoughtLevels
+          thoughtLevelsConfigured ? thoughtLevels : undefined
         ),
       };
 
@@ -130,6 +138,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       customContextLimit,
       thoughtLevel,
       thoughtLevels,
+      thoughtLevelsConfigured,
     ]);
 
     return (
@@ -269,6 +278,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
                 onChange={(vals) => {
                   const nextLevels = vals as ModelThoughtLevelChoice[];
                   setThoughtLevels(nextLevels);
+                  setThoughtLevelsConfigured(true);
                   if (thoughtLevel !== 'auto' && !nextLevels.includes(thoughtLevel)) {
                     setThoughtLevel('auto');
                   }

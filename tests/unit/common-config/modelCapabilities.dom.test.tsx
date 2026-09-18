@@ -367,6 +367,20 @@ describe('updateModelSettings', () => {
       thought_levels: ['off', 'low', 'medium', 'high'],
     });
   });
+
+  it('persists an explicitly empty thought level list so reasoning stays disabled', () => {
+    const result = updateModelSettings(undefined, ['deepseek-reasoner'], 'auto', 'auto', 'auto', 'auto', []);
+
+    expect(result).toEqual({
+      'deepseek-reasoner': { thought_levels: [] },
+    });
+  });
+
+  it('does not create a reasoning override when no thought level choice was made', () => {
+    const result = updateModelSettings(undefined, ['deepseek-reasoner'], 'auto', 'auto');
+
+    expect(result).toEqual({});
+  });
 });
 
 describe('resolveModelThoughtLevels', () => {
@@ -395,6 +409,10 @@ describe('resolveModelThoughtLevels', () => {
   it('returns empty list for non-reasoning models without config', () => {
     expect(resolveModelThoughtLevels('gpt-4o')).toEqual([]);
     expect(resolveModelThoughtLevels('claude-3-5-sonnet')).toEqual([]);
+  });
+
+  it('returns empty list for a model whose reasoning levels were explicitly disabled', () => {
+    expect(resolveModelThoughtLevels('deepseek-reasoner', { thought_levels: [] })).toEqual([]);
   });
 });
 
