@@ -1,9 +1,12 @@
 mod fetchers;
 mod url_fixer;
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
-use aionui_api_types::{BedrockConfig, FetchModelsAnonymousRequest, FetchModelsRequest, FetchModelsResponse};
+use aionui_api_types::{
+    BedrockConfig, FetchModelsAnonymousRequest, FetchModelsRequest, FetchModelsResponse, ModelInfo,
+};
 use aionui_common::decrypt_string;
 use aionui_db::IProviderRepository;
 
@@ -79,11 +82,17 @@ impl ModelFetchService {
     async fn fetch_with_config(&self, config: &FetchConfig, try_fix: bool) -> Result<FetchModelsResponse, SystemError> {
         match fetchers::fetch_for_platform(&self.http_client, config).await {
             Ok(models) => Ok(FetchModelsResponse {
-                models,
+                models: dedupe_models(models),
                 fixed_base_url: None,
             }),
             Err(err) if try_fix && supports_url_fix(&config.platform) => {
-                url_fixer::try_fix_url(&self.http_client, config).await.map_err(|_| err)
+                url_fixer::try_fix_url(&self.http_client, config)
+                    .await
+                    .map(|mut response| {
+                        response.models = dedupe_models(response.models);
+                        response
+                    })
+                    .map_err(|_| err)
             }
             Err(err) => Err(err),
         }
@@ -111,6 +120,23 @@ impl ModelFetchService {
             bedrock_config,
         })
     }
+}
+
+/// Remove duplicate model IDs while preserving the provider's original order.
+/// Some compatible `/models` endpoints return the same model more than once,
+/// which otherwise makes the model selector show duplicate entries on refresh.
+fn dedupe_models(models: Vec<ModelInfo>) -> Vec<ModelInfo> {
+    let mut seen = HashSet::with_capacity(models.len());
+    models
+        .into_iter()
+        .filter(|model| {
+            let id = match model {
+                ModelInfo::Id(id) => id,
+                ModelInfo::Named { id, .. } => id,
+            };
+            seen.insert(id.clone())
+        })
+        .collect()
 }
 
 /// Validate a `FetchModelsAnonymousRequest` — platform / base_url / api_key
@@ -145,6 +171,22 @@ mod tests {
 
     const TEST_KEY: [u8; 32] = [0x42; 32];
     const TEST_USER_ID: &str = "user-1";
+
+    #[test]
+    fn dedupe_models_preserves_first_entry_for_each_id() {
+        let models = dedupe_models(vec![
+            ModelInfo::Id("same".into()),
+            ModelInfo::Named {
+                id: "same".into(),
+                name: "Duplicate label".into(),
+            },
+            ModelInfo::Id("other".into()),
+        ]);
+
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0], ModelInfo::Id("same".into()));
+        assert_eq!(models[1], ModelInfo::Id("other".into()));
+    }
 
     async fn setup() -> (ModelFetchService, aionui_db::Database) {
         let db = init_database_memory().await.unwrap();
