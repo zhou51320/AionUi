@@ -66,12 +66,12 @@ export const getBaseModelName = (modelName: string): string => {
 export type ModelOpenAiApiModeChoice = ModelOpenAiApiMode | 'auto';
 export type ModelImageInputChoice = ModelImageInputCapability | 'auto';
 export type ModelContextLimitChoice = number | 'auto';
-export type ModelThoughtLevelChoice = 'auto' | 'off' | 'low' | 'medium' | 'high';
+export type ModelThoughtLevelChoice = 'auto' | 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
 /** Auto-detect whether a model supports reasoning/thought level settings. */
 export const detectModelThoughtSupport = (modelName: string): boolean => {
   const normalized = getBaseModelName(modelName);
-  return /o1|o3|r1|reasoning|reasoner|thinking|think|deepseek|claude-3-7|qwq|gemini-2/i.test(normalized);
+  return /o1|o3|r1|reasoning|reasoner|thinking|think|deepseek|qwen3|qwen-3|qwq|claude-3-7|gemini-2/i.test(normalized);
 };
 
 /** Auto-detect default context window (in tokens) based on model name. */

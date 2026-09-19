@@ -513,7 +513,7 @@ export type ModelOpenAiApiMode = 'chat_completions' | 'responses';
 
 export type ModelImageInputCapability = 'supported' | 'unsupported';
 
-export type ModelThoughtLevel = 'off' | 'low' | 'medium' | 'high' | 'auto';
+export type ModelThoughtLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'auto';
 
 export type ModelSettings = {
   image_input?: ModelImageInputCapability;

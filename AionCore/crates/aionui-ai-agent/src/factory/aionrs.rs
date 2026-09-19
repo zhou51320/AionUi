@@ -521,7 +521,9 @@ fn default_thought_level(levels: Option<&[String]>) -> Option<String> {
     let levels = levels.filter(|levels| !levels.is_empty())?;
     levels
         .iter()
-        .find(|level| level.as_str() == "medium")
+        .find(|level| level.as_str() == "xhigh")
+        .or_else(|| levels.iter().find(|level| level.as_str() == "high"))
+        .or_else(|| levels.iter().find(|level| level.as_str() == "medium"))
         .or_else(|| levels.iter().find(|level| level.as_str() != "off"))
         .or_else(|| levels.first())
         .cloned()

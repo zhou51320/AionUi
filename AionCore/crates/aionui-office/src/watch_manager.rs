@@ -154,6 +154,12 @@ impl OfficecliWatchManager {
             {
                 Ok(process) => {
                     self.poll_port_ready(port, resolved).await?;
+                    // Some OfficeCLI builds render lazily and leave the page at
+                    // "Waiting for first update" until the first switch event.
+                    // Re-submit the initial file after the server is listening;
+                    // newer builds treat this as an idempotent initial render,
+                    // while older builds simply return a harmless 404.
+                    prime_preview_render(port, resolved).await;
 
                     let key = session_key(user_id, resolved, doc_type);
                     self.sessions.insert(
@@ -563,6 +569,31 @@ async fn officecli_supports_watch(officecli: &Path) -> bool {
         tracing::warn!("officecli exists but does not expose watch command");
     }
     ok
+}
+
+async fn prime_preview_render(port: u16, file_path: &str) {
+    let url = format!("http://127.0.0.1:{port}/api/switch");
+    let result = reqwest::Client::new()
+        .post(url)
+        .timeout(Duration::from_secs(5))
+        .json(&serde_json::json!({ "file": file_path }))
+        .send()
+        .await;
+    match result {
+        Ok(response) if response.status().is_success() => {
+            tracing::debug!(port, "primed office preview render");
+        }
+        Ok(response) => {
+            tracing::debug!(
+                port,
+                status = response.status().as_u16(),
+                "office preview initial switch unavailable"
+            );
+        }
+        Err(error) => {
+            tracing::debug!(port, %error, "office preview initial switch failed; continuing");
+        }
+    }
 }
 
 fn public_preview_error_message(error: &OfficeError) -> String {

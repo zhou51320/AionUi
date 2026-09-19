@@ -534,7 +534,7 @@ describe('model capability selectors', () => {
       />
     );
 
-    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(4));
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(5));
     const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
     fireEvent.click(checkboxes[1]);
     fireEvent.click(checkboxes[2]);

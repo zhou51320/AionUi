@@ -256,6 +256,29 @@ const AionrsSendBox: React.FC<{
     return availableThoughtLevels[0];
   }, [selectedThoughtLevel, availableThoughtLevels, currentModelSettings?.thought_level]);
 
+  // The runtime config does not exist until the first turn on a new
+  // conversation. Build the same selector option from the saved model
+  // capability so the home/send box can choose reasoning before sending.
+  const modelThoughtLevelOption = useMemo<AcpDerivedOption | null>(() => {
+    if (availableThoughtLevels.length === 0) return null;
+    return {
+      id: 'thought_level',
+      category: 'thought_level',
+      currentValue: effectiveThoughtLevel ?? null,
+      options: availableThoughtLevels.map((level) => ({
+        value: level,
+        label:
+          level === 'off'
+            ? t('agent.thoughtLevel.off', '关闭')
+            : level === 'low'
+              ? t('agent.thoughtLevel.low', '低')
+              : level === 'medium'
+                ? t('agent.thoughtLevel.medium', '中')
+                : t('agent.thoughtLevel.high', '高'),
+      })),
+    };
+  }, [availableThoughtLevels, effectiveThoughtLevel, t]);
+
   const handleThoughtLevelChange = useCallback(
     async (lvl: ModelThoughtLevel) => {
       const previousLevel = selectedThoughtLevel;
@@ -900,9 +923,18 @@ const AionrsSendBox: React.FC<{
         }
         rightTools={
           <div className='flex items-center gap-8px min-w-0'>
+            {effectiveContextLimit > 0 || tokenUsage ? (
+              <ContextUsageIndicator tokenUsage={tokenUsage} context_limit={effectiveContextLimit} size={18} />
+            ) : undefined}
             {!isMobile && (
               <>
-                <AionrsModelSelector selection={modelSelection} thoughtLevel={null} />
+                <AionrsModelSelector
+                  selection={modelSelection}
+                  thoughtLevel={modelThoughtLevelOption}
+                  onSetThoughtLevel={async (_optionId, value) => {
+                    await handleThoughtLevelChange(value as ModelThoughtLevel);
+                  }}
+                />
                 {availableThoughtLevels.length > 0 && (
                   <ReasoningEffortSelector
                     value={effectiveThoughtLevel}
@@ -997,9 +1029,6 @@ const AionrsSendBox: React.FC<{
               >
                 {t('team.interruptAndSend')}
               </Button>
-            ) : undefined}
-            {effectiveContextLimit > 0 || tokenUsage ? (
-              <ContextUsageIndicator tokenUsage={tokenUsage} context_limit={effectiveContextLimit} />
             ) : undefined}
           </>
         }

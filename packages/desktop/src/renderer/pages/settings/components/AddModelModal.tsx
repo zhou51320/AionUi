@@ -306,6 +306,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
                     ['low', t('agent.thoughtLevel.low', '低强度 (Low)')],
                     ['medium', t('agent.thoughtLevel.medium', '中强度 (Medium)')],
                     ['high', t('agent.thoughtLevel.high', '高强度 (High)')],
+                    ['xhigh', t('agent.thoughtLevel.xhigh', '高强度 (XHigh)')],
                   ] as const
                 ).map(([value, label]) => (
                   <Checkbox

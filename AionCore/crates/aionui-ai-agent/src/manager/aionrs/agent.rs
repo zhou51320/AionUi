@@ -78,6 +78,7 @@ fn normalize_thinking_config(value: Option<&str>) -> (Option<String>, Option<u32
         Some("low") => (Some("enabled".to_owned()), Some(2_048)),
         Some("medium") => (Some("enabled".to_owned()), Some(8_192)),
         Some("high") => (Some("enabled".to_owned()), Some(16_384)),
+        Some("xhigh") => (Some("enabled".to_owned()), Some(32_768)),
         Some("on" | "enabled" | "true") => (Some("enabled".to_owned()), None),
         None | Some("") | Some("auto") => (None, None),
         // Do not pass an arbitrary persisted value to aionrs, which would
@@ -244,6 +245,11 @@ impl AionrsAgentManager {
         // Clear compactable_tools so naive microcompact will not discard tool results
         // to "[Tool result cleared]". Context compression & caching will be handled losslessly.
         config.compact.compactable_tools.clear();
+        // AionUI exposes the full configured context window. The upstream
+        // default reserves output tokens and therefore starts compaction much
+        // earlier (often around 50–60% for smaller local models). Use an
+        // explicit percentage so a 65,535-token setting compacts at 85%.
+        config.compact.autocompact_threshold_pct = Some(85);
 
         // Apply user-configured or auto-detected model context limit
         if let Some(limit) = config_extra.context_limit {
@@ -301,7 +307,7 @@ impl AionrsAgentManager {
         }
 
         let effort = match config_extra.thought_level.as_deref() {
-            Some("low" | "medium" | "high") => config_extra.thought_level.clone(),
+            Some("low" | "medium" | "high" | "xhigh") => config_extra.thought_level.clone(),
             _ => None,
         };
         engine.set_initial_reasoning_effort(effort);
@@ -718,7 +724,7 @@ impl AionrsAgentManager {
                 )));
             }
             let effort = match value {
-                "low" | "medium" | "high" => Some(value.to_string()),
+                "low" | "medium" | "high" | "xhigh" => Some(value.to_string()),
                 "off" => None,
                 _ => {
                     return Err(AgentError::bad_request(format!(
