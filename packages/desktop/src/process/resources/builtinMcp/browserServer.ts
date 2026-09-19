@@ -30,6 +30,8 @@
  */
 
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { buildMcpSpawnCommand, resolveBridgeToken, resolveBrowserUrl } from './browserServerPort';
 
 /**
@@ -107,6 +109,22 @@ logDiagnostic(`Connecting chrome-devtools-mcp to the in-app browser bridge at ${
  */
 const CHROME_DEVTOOLS_MCP_VERSION = '0.16.0';
 
+const resolveElectronNpxCli = (): string | undefined => {
+  const explicit = process.env.AIONUI_MANAGED_NPX_CLI?.trim();
+  if (explicit && existsSync(explicit)) return explicit;
+  const pathEntries = (process.env.PATH || '').split(path.delimiter);
+  for (const entry of pathEntries) {
+    const candidate = path.join(entry, 'npx-cli.js');
+    if (existsSync(candidate)) return candidate;
+    const shim = path.join(entry, 'npx.cmd');
+    if (existsSync(shim)) {
+      const cli = path.join(entry, 'npx-cli.js');
+      if (existsSync(cli)) return cli;
+    }
+  }
+  return undefined;
+};
+
 /**
  * Windows 上 npx 是 npx.cmd，而 .cmd 属于批处理文件，没有终端无法自己执行。
  * 直接 spawn('npx.cmd') 会同步抛错（CVE-2024-27980 修复后 Node 收紧了 .cmd 处理，
@@ -151,6 +169,8 @@ const spawnPlan = buildMcpSpawnCommand({
   platform: process.platform,
   version: CHROME_DEVTOOLS_MCP_VERSION,
   browserUrl,
+  nodeExecutable: process.platform === 'win32' ? process.execPath : undefined,
+  npxCliPath: process.platform === 'win32' ? resolveElectronNpxCli() : undefined,
 });
 
 const child = spawn(spawnPlan.command, spawnPlan.args, {
@@ -158,7 +178,10 @@ const child = spawn(spawnPlan.command, spawnPlan.args, {
   // Pass stdio straight through: this process is a forwarder, and the MCP
   // protocol stream must not be buffered or rewritten in between.
   stdio: 'inherit',
-  env: process.env,
+  env: {
+    ...process.env,
+    ...(process.platform === 'win32' ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+  },
 });
 
 child.on('error', (error) => {

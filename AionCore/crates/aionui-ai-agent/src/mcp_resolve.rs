@@ -17,7 +17,6 @@ use std::sync::Arc;
 use aionui_api_types::{SessionMcpServer, SessionMcpTransport, TEAM_MCP_SERVER_NAME};
 use aionui_db::IMcpServerRepository;
 use aionui_db::models::McpServerRow;
-use aionui_mcp::is_builtin_browser_launcher;
 use aionui_realtime::EventBroadcaster;
 use aionui_runtime::ensure_runtime_command;
 use tracing::{info, warn};
@@ -124,14 +123,7 @@ pub async fn row_to_session_mcp_server(row: &McpServerRow) -> Result<SessionMcpS
             // Resolve the launch command (npx/bun → bundled path) + fold in the
             // runtime-provided args prefix + env, exactly like the legacy
             // `ensure_stdio_launch`. The resolved form is what the agent spawns.
-            let launch_command = if is_builtin_browser_launcher(&args) {
-                "node"
-            } else {
-                command
-            };
-            let resolved = ensure_runtime_command(launch_command)
-                .await
-                .map_err(|e| e.to_string())?;
+            let resolved = ensure_runtime_command(command).await.map_err(|e| e.to_string())?;
             let mut final_args: Vec<String> = resolved
                 .args_prefix
                 .iter()

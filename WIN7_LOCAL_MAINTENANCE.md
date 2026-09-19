@@ -125,7 +125,7 @@ NODE
 4. Win7 SP1 x64 真机可以启动、登录、恢复会话、读写文件并打开 docx/xlsx/pptx 预览。
 5. officecli 启动不再出现 `Could not load ICU data. UErrorCode: 2`。
 
-本轮 Linux 便携包已生成：`out/AionUi-2.2.2-win-x64.zip`（SHA-256：`e4f6861ad275fa284746a5985fb6b0d8a30dcc6b51340c9cb1984f8e461572e3`）。
+本轮 Linux 便携包已生成：`out/AionUi-2.2.2-win-x64.zip`（SHA-256：`bb3b9bb17d388c305059be033cc5ccbdb5ac9bd7ba0dba12c1849d94794b7e72`）。
 
 ## 相对官方上游的本地改动
 
@@ -167,6 +167,7 @@ DOTNET_SYSTEM_GLOBALIZATION_USENLS=1
 - MCP 启动迁移会修复已有 `chrome-devtools` 数据库记录中的 `@latest` 或旧 JSON，不要求用户手动删除并重新导入。
 - aionrs 思考参数回归：`off/low/medium/high` 在后端分别转换为 `disabled/enabled + thinking_budget`，不再把 UI 值直接传给严格的 `--thinking` 解析器。
 - MCP Node 回归：补齐 Win32 managed Node 的 npm/npx CLI 文件，并在连接检测、ACP、AionRS 和统一 session 注入入口统一识别浏览器 wrapper。
+- Win7 MCP/Skill Node 运行时：系统 Node 仅支持到 13 时，后端通过 `AIONUI_ELECTRON_NODE_PATH` 将所有 `node` 启动解析到 Electron 内置 Node，并设置 `ELECTRON_RUN_AS_NODE=1`；内置浏览器 wrapper 的 npx 也通过 Electron 执行 `npx-cli.js`，不再直接启动 Win7 不兼容的 bundled Node。
 - 验证：`cargo test -p aionui-office` 的 104 个单元测试通过；代理集成测试因当前 Linux 环境端口/代理返回 503，未作为本次回归判定依据。
 
 ## 同步官方最新源码

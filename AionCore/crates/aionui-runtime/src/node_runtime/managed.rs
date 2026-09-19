@@ -836,6 +836,13 @@ fn managed_env(root: &Path) -> Result<Vec<(OsString, OsString)>, NodeRuntimeErro
 
     Ok(vec![
         ("PATH".into(), path),
+        // Expose the exact CLI entrypoint to Electron-based MCP wrappers.
+        // Windows 7 cannot execute the bundled modern Node binary directly,
+        // but Electron's Node can run this JS entrypoint with ELECTRON_RUN_AS_NODE.
+        (
+            "AIONUI_MANAGED_NPX_CLI".into(),
+            managed_npx_cli_path(root).into_os_string(),
+        ),
         ("npm_config_cache".into(), root.join("cache").into_os_string()),
         (
             "npm_config_userconfig".into(),
@@ -851,6 +858,10 @@ fn managed_env(root: &Path) -> Result<Vec<(OsString, OsString)>, NodeRuntimeErro
 
 fn managed_bin_dir(root: &Path) -> PathBuf {
     managed_bin_dir_for_layout(root, current_managed_node_archive_layout())
+}
+
+fn managed_npx_cli_path(root: &Path) -> PathBuf {
+    managed_npx_cli_path_for_layout(root, current_managed_node_archive_layout())
 }
 
 fn current_managed_node_archive_layout() -> ManagedNodeArchiveLayout {

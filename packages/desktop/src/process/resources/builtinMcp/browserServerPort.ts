@@ -101,8 +101,13 @@ export const buildMcpSpawnCommand = (deps: {
   platform: string;
   version: string;
   browserUrl: string;
+  nodeExecutable?: string;
+  npxCliPath?: string;
 }): { command: string; args: string[] } => {
   const mcpArgs = ['-y', `chrome-devtools-mcp@${deps.version}`, '--browser-url', deps.browserUrl];
+  if (deps.platform === 'win32' && deps.nodeExecutable && deps.npxCliPath) {
+    return { command: deps.nodeExecutable, args: [deps.npxCliPath, ...mcpArgs] };
+  }
   return deps.platform === 'win32'
     ? { command: 'cmd.exe', args: ['/c', 'npx', ...mcpArgs] }
     : { command: 'npx', args: mcpArgs };

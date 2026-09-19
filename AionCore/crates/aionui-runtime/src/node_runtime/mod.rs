@@ -87,6 +87,20 @@ pub async fn ensure_runtime_command_with_reporter(
     command: &str,
     reporter: Option<&dyn NodeRuntimeProgressReporter>,
 ) -> Result<ResolvedCommand, NodeRuntimeError> {
+    // On Windows 7 the bundled modern Node executable cannot start, while
+    // Electron's embedded Node remains compatible. The desktop launcher passes
+    // its executable explicitly so every MCP/skill `node` command uses that
+    // runtime instead of falling back to the system Node.
+    if command.trim() == "node"
+        && let Some(electron_node) = std::env::var_os("AIONUI_ELECTRON_NODE_PATH")
+        && !electron_node.is_empty()
+    {
+        return Ok(ResolvedCommand {
+            program: electron_node.into(),
+            args_prefix: Vec::new(),
+            env: vec![("ELECTRON_RUN_AS_NODE".into(), "1".into())],
+        });
+    }
     match probe_runtime_command(command) {
         RuntimeCommandProbe::ExplicitPath { path } => {
             if !path.exists() {

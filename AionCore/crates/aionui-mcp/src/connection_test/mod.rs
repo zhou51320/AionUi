@@ -19,7 +19,6 @@ use serde::Serialize;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
-use crate::is_builtin_browser_launcher;
 use crate::types::McpServerTransport;
 use protocol::{
     JsonRpcRequest, JsonRpcResponse, SseEvent, build_http_headers, build_initialize_request,
@@ -119,18 +118,12 @@ impl McpConnectionTestService {
     ) -> McpConnectionTestResult {
         let reporter =
             runtime_scope_id.map(|scope_id| self.runtime_reporter(user_id.map(str::to_owned), scope_id.to_owned()));
-        // A pre-migration aionui-browser row may still point at Electron.exe
-        // on Windows. Treat the wrapper as a Node tool so connection testing
-        // receives the managed Node path/PATH instead of spawning Electron with
-        // only the stale persisted environment.
-        let launch_command = if is_builtin_browser_launcher(args) {
-            "node"
-        } else {
-            command
-        };
-        let mut cmd = match probe_runtime_command(launch_command) {
+        // Keep an explicit Electron executable for the Win7-compatible browser
+        // wrapper. Replacing it with the logical `node` command would select
+        // the bundled modern Node binary, which Win7 cannot execute.
+        let mut cmd = match probe_runtime_command(command) {
             RuntimeCommandProbe::NodeTool { .. } => {
-                let resolved = match ensure_runtime_command_with_reporter(launch_command, reporter.as_deref()).await {
+                let resolved = match ensure_runtime_command_with_reporter(command, reporter.as_deref()).await {
                     Ok(resolved) => resolved,
                     Err(error) => return spawn_error_result(command, &runtime_resolution_error(&error.to_string())),
                 };

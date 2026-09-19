@@ -58,7 +58,6 @@ import type { AionrsModelSelection } from './useAionrsModelSelection';
 import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
 import { detectModelContextLimit, resolveModelThoughtLevels } from '@/common/utils/modelCapabilities';
 import type { ModelThoughtLevel } from '@/common/config/storage';
-import ReasoningEffortSelector from '@/renderer/components/agent/ReasoningEffortSelector';
 import AionrsModelSelector from './AionrsModelSelector';
 import type { AcpDerivedOption } from '@/renderer/hooks/agent/useAcpConfigOptions';
 
@@ -136,7 +135,7 @@ const AionrsSendBox: React.FC<{
   conversation_id,
   modelSelection,
   thoughtLevel,
-  onSetThoughtLevel,
+  onSetThoughtLevel: _onSetThoughtLevel,
   initialThoughtLevel,
   session_mode,
   agent_name,
@@ -233,6 +232,7 @@ const AionrsSendBox: React.FC<{
   const [selectedThoughtLevel, setSelectedThoughtLevel] = useState<string | undefined>(
     initialThoughtLevel || thoughtLevel?.currentValue || runtimeThoughtLevel?.currentValue
   );
+  const [deferredThoughtLevel, setDeferredThoughtLevel] = useState<ModelThoughtLevel | null>(null);
 
   useEffect(() => {
     if (initialThoughtLevel !== undefined) {
@@ -284,6 +284,14 @@ const AionrsSendBox: React.FC<{
       const previousLevel = selectedThoughtLevel;
       setSelectedThoughtLevel(lvl);
       try {
+        // Never write conversation state while a turn is active. Some backend
+        // versions treat conversation updates as a runtime reconfiguration,
+        // which aborts the current response. Persist once the turn is idle.
+        if (runtimeView.activeTurnId) {
+          setDeferredThoughtLevel(lvl);
+          Message.success(t('agent.thoughtLevel.switchSuccess', '思考强度切换成功'));
+          return;
+        }
         await ipcBridge.conversation.update.invoke({
           id: conversation_id,
           updates: {
@@ -292,21 +300,31 @@ const AionrsSendBox: React.FC<{
             } as any,
           },
         });
-        if (thoughtLevel?.id && onSetThoughtLevel) {
-          await onSetThoughtLevel(thoughtLevel.id, lvl);
-        } else {
-          Message.success(t('agent.thoughtLevel.switchSuccess', '思考强度切换成功'));
-        }
+        // AionRS applies the selected level to the next turn. Do not call the
+        // runtime config endpoint here: it can warm/restart the active agent
+        // and abort an in-flight response. Persisting the conversation extra
+        // is sufficient; the next command resolves this value when sent.
+        Message.success(t('agent.thoughtLevel.switchSuccess', '思考强度切换成功'));
       } catch (err) {
         setSelectedThoughtLevel(previousLevel);
         console.error('Failed to update thought_level', err);
-        if (!thoughtLevel?.id || !onSetThoughtLevel) {
-          Message.error(t('agent.thoughtLevel.switchFailed', '思考强度切换失败'));
-        }
+        Message.error(t('agent.thoughtLevel.switchFailed', '思考强度切换失败'));
       }
     },
-    [conversation_id, onSetThoughtLevel, selectedThoughtLevel, thoughtLevel?.id, t]
+    [conversation_id, runtimeView.activeTurnId, selectedThoughtLevel, t]
   );
+
+  useEffect(() => {
+    if (runtimeView.activeTurnId || !deferredThoughtLevel) return;
+    const level = deferredThoughtLevel;
+    setDeferredThoughtLevel(null);
+    void ipcBridge.conversation.update
+      .invoke({
+        id: conversation_id,
+        updates: { extra: { thought_level: level } as any },
+      })
+      .catch((error) => console.error('Failed to persist deferred thought_level', error));
+  }, [conversation_id, deferredThoughtLevel, runtimeView.activeTurnId]);
 
   useEffect(() => {
     if (!runtimeMode?.currentValue) return;
@@ -935,14 +953,6 @@ const AionrsSendBox: React.FC<{
                     await handleThoughtLevelChange(value as ModelThoughtLevel);
                   }}
                 />
-                {availableThoughtLevels.length > 0 && (
-                  <ReasoningEffortSelector
-                    value={effectiveThoughtLevel}
-                    levels={availableThoughtLevels}
-                    onChange={handleThoughtLevelChange}
-                    compact={isMobile}
-                  />
-                )}
               </>
             )}
             <AgentModeSelector

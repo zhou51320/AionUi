@@ -185,18 +185,16 @@ function isSameStdioTransport(left: IMcpServer['transport'], right: IMcpServer['
 
 function buildBuiltinBrowserServer(): McpImportServer {
   const scriptPath = getBuiltinMcpScriptPath(BUILTIN_BROWSER_SCRIPT);
-  /**
-   * Keep this as the logical `node` command on every platform. AionCore's MCP
-   * launcher resolves `node` to the bundled managed runtime and injects its
-   * PATH/npm environment before starting the wrapper. Using Electron.exe on
-   * Windows (with ELECTRON_RUN_AS_NODE) bypasses that resolution; the wrapper's
-   * nested `npx` then cannot find the managed Node runtime and the browser MCP
-   * fails before the handshake.
-   */
-  const command = 'node';
+  // Windows 7 cannot run the bundled modern Node executable. Electron's own
+  // Node (launched with ELECTRON_RUN_AS_NODE) is the compatible runtime, so
+  // persist the absolute Electron executable instead of the logical `node`
+  // command which AionCore would resolve to the incompatible managed Node.
+  const isWin = process.platform === 'win32';
+  const command = isWin ? process.execPath : 'node';
   const serverConfig = {
     command,
     args: [scriptPath],
+    ...(isWin ? { env: { ELECTRON_RUN_AS_NODE: '1' } } : {}),
   };
 
   return {
@@ -212,6 +210,7 @@ function buildBuiltinBrowserServer(): McpImportServer {
       type: 'stdio',
       command,
       args: serverConfig.args,
+      ...(isWin ? { env: serverConfig.env } : {}),
     },
     original_json: JSON.stringify({ mcpServers: { [BUILTIN_BROWSER_MCP_NAME]: serverConfig } }, null, 2),
   };
