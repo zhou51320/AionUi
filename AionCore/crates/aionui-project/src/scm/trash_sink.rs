@@ -34,15 +34,19 @@ pub(super) struct PlatformTrash;
 fn trash_delete(path: &Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::UI::Shell::{
-        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT,
-        FO_DELETE, SHFILEOPSTRUCTW,
+        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, SHFILEOPSTRUCTW, SHFileOperationW,
     };
 
     let full_path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let path_str = full_path.as_os_str();
     let mut wide_chars: Vec<u16> = path_str.encode_wide().collect();
     // Strip verbatim disk prefix \\?\ if present as SHFileOperation doesn't handle it
-    if wide_chars.len() >= 4 && wide_chars[0] == b'\\' as u16 && wide_chars[1] == b'\\' as u16 && wide_chars[2] == b'?' as u16 && wide_chars[3] == b'\\' as u16 {
+    if wide_chars.len() >= 4
+        && wide_chars[0] == b'\\' as u16
+        && wide_chars[1] == b'\\' as u16
+        && wide_chars[2] == b'?' as u16
+        && wide_chars[3] == b'\\' as u16
+    {
         wide_chars.drain(0..4);
     }
     wide_chars.push(0);

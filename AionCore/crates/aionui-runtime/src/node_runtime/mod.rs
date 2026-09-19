@@ -100,19 +100,17 @@ pub async fn ensure_runtime_command_with_reporter(
         RuntimeCommandProbe::PathLookup { command } => crate::resolve_command_path(&command)
             .map(ResolvedCommand::plain)
             .ok_or_else(|| NodeRuntimeError::system_invalid(format!("command '{command}' not found in PATH"))),
-        RuntimeCommandProbe::NodeTool { tool, command } => {
-            match ensure_node_runtime_with_reporter(reporter).await {
-                Ok(runtime) => Ok(tool_command(tool, &runtime)),
-                Err(err) => {
-                    if let Some(path) = crate::resolve_command_path(&command) {
-                        info!(command, path = %path.display(), "managed node runtime unavailable, falling back to system PATH");
-                        Ok(ResolvedCommand::plain(path))
-                    } else {
-                        Err(err)
-                    }
+        RuntimeCommandProbe::NodeTool { tool, command } => match ensure_node_runtime_with_reporter(reporter).await {
+            Ok(runtime) => Ok(tool_command(tool, &runtime)),
+            Err(err) => {
+                if let Some(path) = crate::resolve_command_path(&command) {
+                    info!(command, path = %path.display(), "managed node runtime unavailable, falling back to system PATH");
+                    Ok(ResolvedCommand::plain(path))
+                } else {
+                    Err(err)
                 }
             }
-        }
+        },
     }
 }
 

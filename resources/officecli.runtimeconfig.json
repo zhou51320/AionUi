@@ -2,7 +2,7 @@
   "runtimeOptions": {
     "configProperties": {
       "System.Globalization.UseNls": true,
-      "System.Globalization.Invariant": false
+      "System.Globalization.Invariant": true
     }
   }
 }

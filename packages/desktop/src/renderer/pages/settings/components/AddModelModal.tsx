@@ -1,4 +1,5 @@
 import type { IProvider } from '@/common/config/storage';
+import { ipcBridge } from '@/common';
 import {
   type ModelImageInputChoice,
   type ModelOpenAiApiModeChoice,
@@ -33,10 +34,10 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     const [thoughtLevel, setThoughtLevel] = useState<ModelThoughtLevelChoice>('auto');
     const [contextMode, setContextMode] = useState<'auto' | 'custom'>('auto');
     const [customContextLimit, setCustomContextLimit] = useState<number | undefined>(undefined);
+    const [resolvedData, setResolvedData] = useState<IProvider | undefined>(data);
     const isNewApi = isNewApiPlatform(data?.platform ?? '');
     const isEditing = Boolean(editingModel);
     const { data: modelList, isLoading } = useModeModeList(data?.platform, data?.base_url, data?.api_key);
-    const existingModels = data?.models || [];
     const showOpenAiApiMode = supportsOpenAiApiMode(data?.platform ?? '', modelProtocol);
 
     const activeModelName = editingModel || (models.length > 0 ? models[models.length - 1] : '');
@@ -59,50 +60,72 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     useEffect(() => {
       if (!modalProps.visible) return;
 
-      setModels([]);
-      const settings = editingModel ? data?.model_settings?.[editingModel] : undefined;
-      setImageInput(settings?.image_input ?? 'auto');
-      setOpenAiApiMode(settings?.openai_api_mode ?? 'auto');
+      let cancelled = false;
+      setResolvedData(data);
+      const initialize = async () => {
+        let currentData = data;
+        if (editingModel && data?.id) {
+          try {
+            const providers = await ipcBridge.mode.listProviders.invoke();
+            currentData = providers?.find((provider) => provider.id === data.id) ?? data;
+          } catch (error) {
+            console.warn('[AddModelModal] failed to refresh provider before editing', error);
+          }
+        }
+        if (cancelled) return;
 
-      const savedThoughtLevels = settings?.thought_levels;
-      if (savedThoughtLevels && savedThoughtLevels.length > 0) {
-        setThoughtLevels(savedThoughtLevels as ModelThoughtLevelChoice[]);
-        setThoughtLevelsConfigured(true);
-      } else if (Array.isArray(savedThoughtLevels)) {
-        setThoughtLevels([]);
-        setThoughtLevelsConfigured(true);
-      } else if (settings?.thought_level && settings.thought_level !== 'auto') {
-        setThoughtLevels([settings.thought_level as ModelThoughtLevelChoice]);
-        setThoughtLevelsConfigured(true);
-      } else if (editingModel && detectModelThoughtSupport(editingModel)) {
-        setThoughtLevels([]);
-        setThoughtLevelsConfigured(false);
-      } else {
-        setThoughtLevels([]);
-        setThoughtLevelsConfigured(false);
-      }
-      setThoughtLevel(settings?.thought_level ?? 'auto');
-      setModelProtocol(editingModel ? (data?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
+        setResolvedData(currentData);
+        setModels([]);
+        const settings = editingModel ? currentData?.model_settings?.[editingModel] : undefined;
+        setImageInput(settings?.image_input ?? 'auto');
+        setOpenAiApiMode(settings?.openai_api_mode ?? 'auto');
 
-      if (settings?.context_limit && settings.context_limit > 0) {
-        setContextMode('custom');
-        setCustomContextLimit(settings.context_limit);
-      } else {
-        setContextMode('auto');
-        setCustomContextLimit(undefined);
-      }
+        const savedThoughtLevels = settings?.thought_levels;
+        if (savedThoughtLevels && savedThoughtLevels.length > 0) {
+          setThoughtLevels(savedThoughtLevels as ModelThoughtLevelChoice[]);
+          setThoughtLevelsConfigured(true);
+        } else if (Array.isArray(savedThoughtLevels)) {
+          setThoughtLevels([]);
+          setThoughtLevelsConfigured(true);
+        } else if (settings?.thought_level && settings.thought_level !== 'auto') {
+          setThoughtLevels([settings.thought_level as ModelThoughtLevelChoice]);
+          setThoughtLevelsConfigured(true);
+        } else if (editingModel && detectModelThoughtSupport(editingModel)) {
+          setThoughtLevels([]);
+          setThoughtLevelsConfigured(false);
+        } else {
+          setThoughtLevels([]);
+          setThoughtLevelsConfigured(false);
+        }
+        setThoughtLevel(settings?.thought_level ?? 'auto');
+        setModelProtocol(editingModel ? (currentData?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
+
+        if (settings?.context_limit && settings.context_limit > 0) {
+          setContextMode('custom');
+          setCustomContextLimit(settings.context_limit);
+        } else {
+          setContextMode('auto');
+          setCustomContextLimit(undefined);
+        }
+      };
+
+      void initialize();
+      return () => {
+        cancelled = true;
+      };
     }, [data, editingModel, modalProps.visible]);
 
     const handleConfirm = useCallback(() => {
-      if (!data || (!editingModel && !models.length)) return;
+      const sourceData = resolvedData ?? data;
+      if (!sourceData || (!editingModel && !models.length)) return;
       const targetModels = editingModel ? [editingModel] : models;
       const effectiveContextLimit = contextMode === 'auto' ? 'auto' : (customContextLimit ?? 'auto');
 
       const updatedData: IProvider = {
-        ...data,
-        models: editingModel ? existingModels : [...existingModels, ...models],
+        ...sourceData,
+        models: editingModel ? sourceData.models || [] : [...(sourceData.models || []), ...models],
         model_settings: updateModelSettings(
-          data.model_settings,
+          sourceData.model_settings,
           targetModels,
           imageInput,
           showOpenAiApiMode ? openAiApiMode : 'auto',
@@ -115,7 +138,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       // new-api 平台：为每个选中的模型添加协议配置 / new-api platform: add protocol config for every selected model
       if (isNewApi) {
         updatedData.model_protocols = {
-          ...data?.model_protocols,
+          ...sourceData.model_protocols,
           ...Object.fromEntries(targetModels.map((model) => [model, modelProtocol])),
         };
       }
@@ -125,7 +148,6 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     }, [
       data,
       editingModel,
-      existingModels,
       imageInput,
       isNewApi,
       modelProtocol,
@@ -139,7 +161,18 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       thoughtLevel,
       thoughtLevels,
       thoughtLevelsConfigured,
+      resolvedData,
     ]);
+
+    const toggleThoughtLevel = useCallback(
+      (level: ModelThoughtLevelChoice, checked: boolean) => {
+        const next = checked ? [...new Set([...thoughtLevels, level])] : thoughtLevels.filter((item) => item !== level);
+        setThoughtLevels(next);
+        setThoughtLevelsConfigured(true);
+        if (thoughtLevel !== 'auto' && !next.includes(thoughtLevel)) setThoughtLevel('auto');
+      },
+      [thoughtLevel, thoughtLevels]
+    );
 
     return (
       <AionModal
@@ -212,14 +245,13 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
           <div className='space-y-8px'>
             <div className='flex items-center justify-between text-13px font-500 text-t-secondary'>
               <span>{t('settings.contextLimit')}</span>
-              <Radio.Group
-                type='button'
-                size='mini'
-                value={contextMode}
-                onChange={(val) => setContextMode(val)}
-              >
+              <Radio.Group type='button' size='mini' value={contextMode} onChange={(val) => setContextMode(val)}>
                 <Radio value='auto'>
-                  {t('settings.contextLimitAuto')} ({detectedContextLimit >= 1000000 ? `${(detectedContextLimit / 1000000).toFixed(1)}M` : `${Math.round(detectedContextLimit / 1000)}k`})
+                  {t('settings.contextLimitAuto')} (
+                  {detectedContextLimit >= 1000000
+                    ? `${(detectedContextLimit / 1000000).toFixed(1)}M`
+                    : `${Math.round(detectedContextLimit / 1000)}k`}
+                  )
                 </Radio>
                 <Radio value='custom'>{t('settings.contextLimitCustom')}</Radio>
               </Radio.Group>
@@ -267,29 +299,28 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
               <div className='text-12px text-t-secondary'>
                 {t('settings.supportedThoughtLevels', '勾选该模型支持的思考强度 (聊天时可在输入框随时切换):')}
               </div>
-              <Checkbox.Group
-                options={[
-                  { label: t('agent.thoughtLevel.off', '关闭 (Off)'), value: 'off' },
-                  { label: t('agent.thoughtLevel.low', '低强度 (Low)'), value: 'low' },
-                  { label: t('agent.thoughtLevel.medium', '中强度 (Medium)'), value: 'medium' },
-                  { label: t('agent.thoughtLevel.high', '高强度 (High)'), value: 'high' },
-                ]}
-                value={thoughtLevels}
-                onChange={(vals) => {
-                  const nextLevels = vals as ModelThoughtLevelChoice[];
-                  setThoughtLevels(nextLevels);
-                  setThoughtLevelsConfigured(true);
-                  if (thoughtLevel !== 'auto' && !nextLevels.includes(thoughtLevel)) {
-                    setThoughtLevel('auto');
-                  }
-                }}
-              />
+              <div className='flex flex-wrap gap-x-12px gap-y-6px'>
+                {(
+                  [
+                    ['off', t('agent.thoughtLevel.off', '关闭 (Off)')],
+                    ['low', t('agent.thoughtLevel.low', '低强度 (Low)')],
+                    ['medium', t('agent.thoughtLevel.medium', '中强度 (Medium)')],
+                    ['high', t('agent.thoughtLevel.high', '高强度 (High)')],
+                  ] as const
+                ).map(([value, label]) => (
+                  <Checkbox
+                    key={value}
+                    checked={thoughtLevels.includes(value)}
+                    onChange={(checked) => toggleThoughtLevel(value, checked)}
+                  >
+                    {label}
+                  </Checkbox>
+                ))}
+              </div>
             </div>
             {thoughtLevels.length > 0 && (
               <div className='space-y-6px pt-4px'>
-                <div className='text-12px text-t-secondary'>
-                  {t('settings.defaultThoughtLevel', '默认思考强度:')}
-                </div>
+                <div className='text-12px text-t-secondary'>{t('settings.defaultThoughtLevel', '默认思考强度:')}</div>
                 <Select
                   value={thoughtLevel}
                   onChange={(val) => setThoughtLevel(val as ModelThoughtLevelChoice)}
@@ -305,8 +336,14 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
             )}
             <div className='text-11px text-t-secondary leading-4'>
               {isReasoningCapable
-                ? t('settings.thoughtLevelSupportedTip', '该模型支持深度推理。勾选支持的强度后，在聊天输入框下方即可随时切换本次发送的推理强度。')
-                : t('settings.thoughtLevelGeneralTip', '仅适用于支持思考/推理的模型 (如 o1/o3/DeepSeek-R1 等)。勾选后可在输入框下方随时切换。')}
+                ? t(
+                    'settings.thoughtLevelSupportedTip',
+                    '该模型支持深度推理。勾选支持的强度后，在聊天输入框下方即可随时切换本次发送的推理强度。'
+                  )
+                : t(
+                    'settings.thoughtLevelGeneralTip',
+                    '仅适用于支持思考/推理的模型 (如 o1/o3/DeepSeek-R1 等)。勾选后可在输入框下方随时切换。'
+                  )}
             </div>
           </div>
 

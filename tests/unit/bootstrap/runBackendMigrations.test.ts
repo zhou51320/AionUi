@@ -96,6 +96,24 @@ const imageServer = (): IMcpServer => ({
   ),
 });
 
+const legacyChromeDevtoolsServer = (): IMcpServer => ({
+  id: 'chrome-devtools-id',
+  name: 'chrome-devtools',
+  description: 'Default MCP server: chrome-devtools',
+  enabled: true,
+  builtin: true,
+  transport: {
+    type: 'stdio',
+    command: 'npx',
+    args: ['-y', 'chrome-devtools-mcp@latest'],
+  },
+  created_at: 1,
+  updated_at: 1,
+  original_json: JSON.stringify({
+    mcpServers: { 'chrome-devtools': { command: 'npx', args: ['-y', 'chrome-devtools-mcp@latest'] } },
+  }),
+});
+
 const configFile = {
   get: configFileGetMock,
   set: configFileSetMock,
@@ -213,6 +231,27 @@ describe('runBackendMigrations', () => {
       'no',
       'yes',
       'yes'
+    );
+  });
+
+  it('repairs an existing chrome-devtools row to the pinned version', async () => {
+    listServersMock.mockResolvedValue([legacyChromeDevtoolsServer()]);
+
+    await runBackendMigrations(configFile as never);
+
+    expect(updateServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'chrome-devtools-id',
+        data: expect.objectContaining({
+          builtin: true,
+          transport: expect.objectContaining({
+            type: 'stdio',
+            command: 'npx',
+            args: ['-y', 'chrome-devtools-mcp@0.16.0'],
+          }),
+          original_json: expect.stringContaining('chrome-devtools-mcp@0.16.0'),
+        }),
+      })
     );
   });
 });

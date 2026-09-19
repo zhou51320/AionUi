@@ -66,6 +66,27 @@ fn resolve_aionui_config(cli_args: &CliArgs) -> Result<Config, AgentError> {
     Ok(config)
 }
 
+/// Convert AionUI's user-facing thought levels to the aionrs CLI protocol.
+///
+/// The UI deliberately exposes four levels, while aionrs accepts only
+/// `enabled`/`disabled` for `--thinking`; the level itself is represented by
+/// `--thinking-budget`. Keep this conversion at the backend boundary so a
+/// persisted UI value can never leak into aionrs' strict parser.
+fn normalize_thinking_config(value: Option<&str>) -> (Option<String>, Option<u32>) {
+    match value.map(str::trim).map(str::to_ascii_lowercase).as_deref() {
+        Some("off" | "disabled" | "false") => (Some("disabled".to_owned()), Some(0)),
+        Some("low") => (Some("enabled".to_owned()), Some(2_048)),
+        Some("medium") => (Some("enabled".to_owned()), Some(8_192)),
+        Some("high") => (Some("enabled".to_owned()), Some(16_384)),
+        Some("on" | "enabled" | "true") => (Some("enabled".to_owned()), None),
+        None | Some("") | Some("auto") => (None, None),
+        // Do not pass an arbitrary persisted value to aionrs, which would
+        // recreate the `Invalid --thinking value` startup failure. A future
+        // protocol value can be added explicitly above.
+        Some(_) => (None, None),
+    }
+}
+
 #[derive(Clone, Debug)]
 struct AionrsFinalInputDumpContext {
     dump_dir: PathBuf,
@@ -193,14 +214,7 @@ impl AionrsAgentManager {
                 runtime_env: config_extra.runtime_env.clone(),
             });
 
-        let (thinking, thinking_budget) = match config_extra.thought_level.as_deref() {
-            Some("off") => (Some("false".to_string()), Some(0)),
-            Some("low") => (Some("low".to_string()), Some(2048)),
-            Some("medium") => (Some("medium".to_string()), Some(8192)),
-            Some("high") => (Some("high".to_string()), Some(16384)),
-            Some(other) => (Some(other.to_string()), None),
-            None => (None, None),
-        };
+        let (thinking, thinking_budget) = normalize_thinking_config(config_extra.thought_level.as_deref());
 
         let cli_args = CliArgs {
             provider: Some(config_extra.provider.clone()),

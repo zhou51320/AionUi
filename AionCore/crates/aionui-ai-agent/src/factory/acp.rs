@@ -16,7 +16,7 @@ use aionui_api_types::{AgentMetadata, SessionMcpServer, SessionMcpTransport, TEA
 use aionui_common::CommandSpec;
 use aionui_db::IMcpServerRepository;
 use aionui_db::models::McpServerRow;
-use aionui_mcp::{AcpMcpCapabilities, parse_acp_mcp_capabilities};
+use aionui_mcp::{AcpMcpCapabilities, is_builtin_browser_launcher, parse_acp_mcp_capabilities};
 use aionui_runtime::{ensure_runtime_command, ensure_runtime_command_with_reporter};
 use tracing::{info, warn};
 
@@ -594,7 +594,12 @@ async fn ensure_stdio_launch(
     args: &[String],
     env: &[(String, String)],
 ) -> Result<(std::path::PathBuf, Vec<String>, Vec<EnvVariable>), String> {
-    let resolved = ensure_runtime_command(command)
+    let launch_command = if is_builtin_browser_launcher(args) {
+        "node"
+    } else {
+        command
+    };
+    let resolved = ensure_runtime_command(launch_command)
         .await
         .map_err(|error| error.to_string())?;
 

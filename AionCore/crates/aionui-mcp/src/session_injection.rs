@@ -67,6 +67,21 @@ pub struct AcpMcpCapabilities {
     pub sse: bool,
 }
 
+/// Returns whether an MCP stdio argv launches AionUI's in-app browser wrapper.
+///
+/// Older desktop builds persisted the wrapper with Electron.exe as the command
+/// on Windows. That explicit path bypasses the managed Node resolver, so the
+/// wrapper's nested npx cannot see the bundled runtime. Callers should use the
+/// logical `node` command whenever this marker is present, even while repairing
+/// an old persisted MCP row.
+pub fn is_builtin_browser_launcher(args: &[String]) -> bool {
+    args.iter().any(|arg| {
+        arg.rsplit(['/', '\\'])
+            .next()
+            .is_some_and(|name| name.eq_ignore_ascii_case("builtin-mcp-browser.js"))
+    })
+}
+
 impl AcpMcpCapabilities {
     /// Returns true if no transport type is supported.
     pub fn is_empty(&self) -> bool {
@@ -294,6 +309,17 @@ mod tests {
             http: true,
             sse: true,
         }
+    }
+
+    #[test]
+    fn browser_wrapper_marker_accepts_unix_and_windows_paths() {
+        assert!(is_builtin_browser_launcher(&[
+            "/app/resources/app.asar.unpacked/out/main/builtin-mcp-browser.js".into(),
+        ]));
+        assert!(is_builtin_browser_launcher(&[
+            r"C:\Program Files\AionUi\resources\builtin-mcp-browser.js".into(),
+        ]));
+        assert!(!is_builtin_browser_launcher(&["chrome-devtools-mcp".into()]));
     }
 
     // -- AcpMcpCapabilities ---------------------------------------------------

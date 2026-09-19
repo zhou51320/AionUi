@@ -389,5 +389,3 @@ mod tests {
         assert!(!ContextCacheStore::should_compress_at_85_percent(90_000, 0));
     }
 }
-
-

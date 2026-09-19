@@ -2433,8 +2433,7 @@ impl ConversationService {
         if model_changed || thought_level_changed {
             info!(
                 model_changed,
-                thought_level_changed,
-                "Conversation updated, killing agent task due to model or thought_level change"
+                thought_level_changed, "Conversation updated, killing agent task due to model or thought_level change"
             );
             if let Err(e) = task_manager.kill(id, None) {
                 warn!(error = %ErrorChain(&e), "Failed to kill agent after model/thought_level change");

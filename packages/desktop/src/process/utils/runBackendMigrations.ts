@@ -24,6 +24,7 @@ type MigrationStepResult = boolean;
 type McpImportServer = Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'>;
 type BackendClientPreferences = Record<string, unknown>;
 const BUILTIN_CHROME_DEVTOOLS_NAME = 'chrome-devtools';
+const CHROME_DEVTOOLS_MCP_VERSION = '0.16.0';
 
 /**
  * 内置「应用内浏览器」MCP。
@@ -163,10 +164,7 @@ function areStringArraysEqual(left?: string[], right?: string[]): boolean {
   return leftValue.every((value, index) => value === rightValue[index]);
 }
 
-function areStringRecordsEqual(
-  left?: Record<string, string>,
-  right?: Record<string, string>
-): boolean {
+function areStringRecordsEqual(left?: Record<string, string>, right?: Record<string, string>): boolean {
   const leftKeys = Object.keys(left || {});
   const rightKeys = Object.keys(right || {});
   if (leftKeys.length !== rightKeys.length) {
@@ -187,13 +185,18 @@ function isSameStdioTransport(left: IMcpServer['transport'], right: IMcpServer['
 
 function buildBuiltinBrowserServer(): McpImportServer {
   const scriptPath = getBuiltinMcpScriptPath(BUILTIN_BROWSER_SCRIPT);
-  const isWin = process.platform === 'win32';
-  const command = isWin ? process.execPath : 'node';
-  const env = isWin ? { ELECTRON_RUN_AS_NODE: '1' } : undefined;
+  /**
+   * Keep this as the logical `node` command on every platform. AionCore's MCP
+   * launcher resolves `node` to the bundled managed runtime and injects its
+   * PATH/npm environment before starting the wrapper. Using Electron.exe on
+   * Windows (with ELECTRON_RUN_AS_NODE) bypasses that resolution; the wrapper's
+   * nested `npx` then cannot find the managed Node runtime and the browser MCP
+   * fails before the handshake.
+   */
+  const command = 'node';
   const serverConfig = {
     command,
     args: [scriptPath],
-    ...(env ? { env } : {}),
   };
 
   return {
@@ -209,33 +212,33 @@ function buildBuiltinBrowserServer(): McpImportServer {
       type: 'stdio',
       command,
       args: serverConfig.args,
-      ...(env ? { env } : {}),
     },
     original_json: JSON.stringify({ mcpServers: { [BUILTIN_BROWSER_MCP_NAME]: serverConfig } }, null, 2),
   };
 }
 
-function buildDefaultMcpServers(): McpImportServer[] {
-  const chromeConfig = {
+function buildBuiltinChromeDevtoolsServer(): McpImportServer {
+  const serverConfig = {
     command: 'npx',
-    args: ['-y', 'chrome-devtools-mcp@latest'],
+    args: ['-y', `chrome-devtools-mcp@${CHROME_DEVTOOLS_MCP_VERSION}`],
   };
 
-  return [
-    {
-      name: BUILTIN_CHROME_DEVTOOLS_NAME,
-      description: 'Default MCP server: chrome-devtools',
-      enabled: false,
-      builtin: true,
-      transport: {
-        type: 'stdio',
-        command: chromeConfig.command,
-        args: chromeConfig.args,
-      },
-      original_json: JSON.stringify({ mcpServers: { [BUILTIN_CHROME_DEVTOOLS_NAME]: chromeConfig } }, null, 2),
+  return {
+    name: BUILTIN_CHROME_DEVTOOLS_NAME,
+    description: 'Default MCP server: chrome-devtools',
+    enabled: false,
+    builtin: true,
+    transport: {
+      type: 'stdio',
+      command: serverConfig.command,
+      args: serverConfig.args,
     },
-    buildBuiltinBrowserServer(),
-  ];
+    original_json: JSON.stringify({ mcpServers: { [BUILTIN_CHROME_DEVTOOLS_NAME]: serverConfig } }, null, 2),
+  };
+}
+
+function buildDefaultMcpServers(): McpImportServer[] {
+  return [buildBuiltinChromeDevtoolsServer(), buildBuiltinBrowserServer()];
 }
 
 async function isCommandAvailable(command: string): Promise<boolean> {
@@ -279,34 +282,6 @@ async function ensureBuiltinChromeDevtoolsAvailability(server?: IMcpServer): Pro
   }
 }
 
-function buildOriginalJsonFromTransport(server: Pick<IMcpServer, 'name' | 'description' | 'transport'>): string {
-  const transport_config =
-    server.transport.type === 'stdio'
-      ? {
-          command: server.transport.command,
-          args: server.transport.args || [],
-          env: server.transport.env || {},
-        }
-      : {
-          type: server.transport.type,
-          url: server.transport.url,
-          ...(server.transport.headers ? { headers: server.transport.headers } : {}),
-        };
-
-  return JSON.stringify(
-    {
-      mcpServers: {
-        [server.name]: {
-          ...(server.description ? { description: server.description } : {}),
-          ...transport_config,
-        },
-      },
-    },
-    null,
-    2
-  );
-}
-
 async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<void> {
   const [backendPrefs, fileImageConfig, providers] = await Promise.all([
     fetchBackendClientPreferences(),
@@ -332,20 +307,28 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
   }
 
   const existingChromeDevtools = existingByName.get(BUILTIN_CHROME_DEVTOOLS_NAME);
-  if (
-    existingChromeDevtools &&
-    (existingChromeDevtools.builtin !== true ||
+  if (existingChromeDevtools) {
+    const desiredChromeDevtools = buildBuiltinChromeDevtoolsServer();
+    const chromeTransportChanged = !isSameStdioTransport(
+      existingChromeDevtools.transport,
+      desiredChromeDevtools.transport
+    );
+    const chromeJsonChanged = existingChromeDevtools.original_json !== desiredChromeDevtools.original_json;
+    const chromeMetadataMissing =
+      existingChromeDevtools.builtin !== true ||
       !existingChromeDevtools.original_json ||
       existingChromeDevtools.original_json.trim() === '' ||
-      existingChromeDevtools.original_json.trim() === '{}')
-  ) {
-    await mcpService.updateServer.invoke({
-      id: existingChromeDevtools.id,
-      data: {
-        builtin: true,
-        original_json: buildOriginalJsonFromTransport(existingChromeDevtools),
-      },
-    });
+      existingChromeDevtools.original_json.trim() === '{}';
+    if (chromeTransportChanged || chromeJsonChanged || chromeMetadataMissing) {
+      await mcpService.updateServer.invoke({
+        id: existingChromeDevtools.id,
+        data: {
+          transport: desiredChromeDevtools.transport,
+          builtin: true,
+          original_json: desiredChromeDevtools.original_json,
+        },
+      });
+    }
   }
 
   const refreshedServers = await mcpService.listServers.invoke();

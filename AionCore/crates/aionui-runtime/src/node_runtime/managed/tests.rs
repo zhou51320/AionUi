@@ -623,7 +623,7 @@ fn windows_managed_runtime_prefers_direct_cli_entrypoints_over_wrappers() {
 }
 
 #[test]
-fn windows_managed_runtime_falls_back_to_wrappers_when_direct_cli_is_missing() {
+fn windows_managed_runtime_rejects_wrapper_only_node_layout() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().join("node-v24.11.0-win-x64");
     std::fs::create_dir_all(&root).unwrap();
@@ -632,13 +632,12 @@ fn windows_managed_runtime_falls_back_to_wrappers_when_direct_cli_is_missing() {
     write_file(&root.join("npm.cmd"));
     write_file(&root.join("npx.cmd"));
 
-    let runtime = runtime_from_root_for_layout(&root, ResolvedNodeSource::Managed, ManagedNodeArchiveLayout::Windows)
-        .expect("runtime should resolve");
-
-    assert_eq!(runtime.npm_path, root.join("npm.cmd"));
-    assert!(runtime.npm_args_prefix.is_empty());
-    assert_eq!(runtime.npx_path, root.join("npx.cmd"));
-    assert!(runtime.npx_args_prefix.is_empty());
+    let error = runtime_from_root_for_layout(&root, ResolvedNodeSource::Managed, ManagedNodeArchiveLayout::Windows)
+        .expect_err("wrapper-only Node runtime must not be accepted");
+    assert!(
+        error.to_string().contains("managed npm entrypoint missing"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]

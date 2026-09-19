@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   ],
   modelListAsArray: false,
   modelListUnavailable: false,
+  listProviders: vi.fn(),
   mutate: vi.fn(),
   onSubmit: vi.fn(),
   providerMutate: vi.fn(),
@@ -88,7 +89,7 @@ vi.mock('@/common', () => ({
         invoke: vi.fn(),
       },
       listProviders: {
-        invoke: vi.fn(),
+        invoke: mocks.listProviders,
       },
       updateProvider: {
         invoke: mocks.updateProvider,
@@ -265,7 +266,11 @@ vi.mock('@arco-design/web-react', async (importOriginal) => {
   };
 });
 
-import { resolveModelThoughtLevels, supportsOpenAiApiMode, updateModelSettings } from '@/common/utils/modelCapabilities';
+import {
+  resolveModelThoughtLevels,
+  supportsOpenAiApiMode,
+  updateModelSettings,
+} from '@/common/utils/modelCapabilities';
 import AddModelModal from '@/renderer/pages/settings/components/AddModelModal';
 import AddPlatformModal from '@/renderer/pages/settings/components/AddPlatformModal';
 import ModelModalContent from '@/renderer/components/settings/SettingsModal/contents/ModelModalContent';
@@ -352,15 +357,12 @@ describe('updateModelSettings', () => {
   });
 
   it('saves multiple thought_levels and default thought_level correctly', () => {
-    const result = updateModelSettings(
-      undefined,
-      ['deepseek-reasoner'],
-      'auto',
-      'auto',
-      'auto',
+    const result = updateModelSettings(undefined, ['deepseek-reasoner'], 'auto', 'auto', 'auto', 'medium', [
+      'off',
+      'low',
       'medium',
-      ['off', 'low', 'medium', 'high']
-    );
+      'high',
+    ]);
 
     expect(result['deepseek-reasoner']).toEqual({
       thought_level: 'medium',
@@ -372,7 +374,23 @@ describe('updateModelSettings', () => {
     const result = updateModelSettings(undefined, ['deepseek-reasoner'], 'auto', 'auto', 'auto', 'auto', []);
 
     expect(result).toEqual({
-      'deepseek-reasoner': { thought_levels: [] },
+      'deepseek-reasoner': { thought_level: 'auto', thought_levels: [] },
+    });
+  });
+
+  it('keeps an automatic default when explicit reasoning levels are configured', () => {
+    const result = updateModelSettings(undefined, ['deepseek-reasoner'], 'auto', 'auto', 'auto', 'auto', [
+      'off',
+      'low',
+      'medium',
+      'high',
+    ]);
+
+    expect(result).toEqual({
+      'deepseek-reasoner': {
+        thought_level: 'auto',
+        thought_levels: ['off', 'low', 'medium', 'high'],
+      },
     });
   });
 
@@ -390,6 +408,15 @@ describe('resolveModelThoughtLevels', () => {
         thought_levels: ['low', 'high'],
       })
     ).toEqual(['low', 'high']);
+  });
+
+  it('uses the independent level list even when the default is auto', () => {
+    expect(
+      resolveModelThoughtLevels('custom-model', {
+        thought_level: 'auto',
+        thought_levels: ['off', 'low', 'medium', 'high'],
+      })
+    ).toEqual(['off', 'low', 'medium', 'high']);
   });
 
   it('falls back to [off, thought_level] when only thought_level is configured', () => {
@@ -422,6 +449,7 @@ describe('model capability selectors', () => {
     mocks.modelListAsArray = false;
     mocks.modelListUnavailable = false;
     mocks.singleModelValue = false;
+    mocks.listProviders.mockResolvedValue(undefined);
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -493,6 +521,56 @@ describe('model capability selectors', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'common.confirm' }));
     expect(mocks.onSubmit).toHaveBeenCalledWith(expect.objectContaining({ model_settings: {} }));
+  });
+
+  it('lets users check reasoning levels and persists the selected list', async () => {
+    render(
+      <AddModelModal
+        data={provider()}
+        model='gpt-4o'
+        modalProps={{ visible: true }}
+        modalCtrl={{ close: mocks.close }}
+        onSubmit={mocks.onSubmit}
+      />
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(4));
+    const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    fireEvent.click(checkboxes[1]);
+    fireEvent.click(checkboxes[2]);
+    expect(checkboxes[1]).toBeChecked();
+    expect(checkboxes[2]).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.confirm' }));
+
+    expect(mocks.onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model_settings: {
+          'gpt-4o': { thought_level: 'auto', thought_levels: ['low', 'medium'] },
+        },
+      })
+    );
+  });
+
+  it('reloads saved reasoning levels when reopening the editor', async () => {
+    const saved = provider({ model_settings: { 'gpt-4o': { thought_levels: ['low', 'medium'] } } });
+    mocks.listProviders.mockResolvedValue([saved]);
+
+    render(
+      <AddModelModal
+        data={provider()}
+        model='gpt-4o'
+        modalProps={{ visible: true }}
+        modalCtrl={{ close: mocks.close }}
+        onSubmit={mocks.onSubmit}
+      />
+    );
+
+    await waitFor(() => {
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes[1]).toBeChecked();
+      expect(checkboxes[2]).toBeChecked();
+    });
   });
 
   it('does not submit when provider data is unavailable', () => {

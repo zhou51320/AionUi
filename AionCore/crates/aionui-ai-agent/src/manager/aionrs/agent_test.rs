@@ -67,6 +67,42 @@ fn make_cli_args(project_dir: PathBuf, provider: &str, model: &str) -> CliArgs {
 }
 
 #[test]
+fn normalize_thinking_config_maps_ui_levels_to_aionrs_protocol() {
+    assert_eq!(
+        normalize_thinking_config(Some("off")),
+        (Some("disabled".into()), Some(0))
+    );
+    assert_eq!(
+        normalize_thinking_config(Some("low")),
+        (Some("enabled".into()), Some(2_048))
+    );
+    assert_eq!(
+        normalize_thinking_config(Some("medium")),
+        (Some("enabled".into()), Some(8_192))
+    );
+    assert_eq!(
+        normalize_thinking_config(Some("high")),
+        (Some("enabled".into()), Some(16_384))
+    );
+}
+
+#[test]
+fn normalize_thinking_config_accepts_protocol_values_and_ignores_invalid_values() {
+    assert_eq!(
+        normalize_thinking_config(Some("enabled")),
+        (Some("enabled".into()), None)
+    );
+    assert_eq!(
+        normalize_thinking_config(Some("disabled")),
+        (Some("disabled".into()), Some(0))
+    );
+    assert_eq!(normalize_thinking_config(Some("auto")), (None, None));
+    assert_eq!(normalize_thinking_config(None), (None, None));
+    assert_eq!(normalize_thinking_config(Some("low")).0, Some("enabled".into()));
+    assert_eq!(normalize_thinking_config(Some("unsupported")), (None, None));
+}
+
+#[test]
 fn resolve_aionui_config_discards_standalone_max_token_settings() {
     let project = tempfile::tempdir().unwrap();
     fs::write(

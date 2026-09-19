@@ -223,6 +223,30 @@ function verifyManagedNodeFromContract(baseDir, runtimeKey, contract, checked, m
       path: relativePath,
     });
   }
+
+  // npx is part of the managed Node contract, not an optional convenience:
+  // built-in MCP servers invoke npm packages at runtime. A Windows runtime
+  // containing only node.exe plus version-reporting wrapper scripts can pass
+  // superficial `npx --version` checks while every real `npx -y ...` launch
+  // fails. Require the npm CLI entrypoints in the packaged runtime.
+  const npmBinRoot = runtimeKey.startsWith('win32')
+    ? ['node_modules', 'npm', 'bin']
+    : ['lib', 'node_modules', 'npm', 'bin'];
+  for (const npmCli of ['npm-cli.js', 'npx-cli.js']) {
+    const npmCliPath = joinContractPath(joinContractPath(baseDir, node.root), [...npmBinRoot, npmCli].join('/'));
+    const npmCliRelative = contractBundledPath(runtimeKey, node.root, [...npmBinRoot, npmCli].join('/'));
+    checked.push(npmCliRelative);
+    if (!isFile(npmCliPath)) {
+      missing.push(npmCliRelative);
+      failures.push({
+        component: 'managed-node',
+        reason: 'missing_npm_cli',
+        version: node.version,
+        runtimeKey,
+        path: npmCliRelative,
+      });
+    }
+  }
 }
 
 function verifyManagedClisFromContract(baseDir, runtimeKey, contract, checked, missing, failures) {

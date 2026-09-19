@@ -25,15 +25,42 @@ AI-friendly CLI for .docx, .xlsx, .pptx. Single binary, no dependencies, no Offi
 
 ## OfficeCLI Executable Resolution (Pre-bundled in AionUi)
 
-`officecli` is pre-bundled in AionUi. **Do not run manual install scripts.** Locate and invoke `officecli` in the following order:
-1. Direct command if available in PATH: `officecli` (or `officecli.exe`)
-2. In AionUi's pre-bundled resources directory on Windows:
-   - Check `$env:LOCALAPPDATA\Programs\AionUi\resources\officecli.exe`
-   - Check `(Get-Process -Name AionUi -ErrorAction SilentlyContinue).Path | Split-Path | Join-Path -ChildPath "resources\officecli.exe"`
-   - Check `.\resources\officecli.exe` or `..\resources\officecli.exe` (relative to current directory)
-   - Fallback: `$env:LOCALAPPDATA\OfficeCli\officecli.exe`
-   If found, invoke directly via `& "<resolved-path>" <args>` or set an alias `Set-Alias officecli "<resolved-path>"`.
-3. macOS / Linux: `/Applications/AionUi.app/Contents/Resources/officecli` or `~/.local/bin/officecli`
+`officecli` is pre-bundled in AionUi. **Do not run manual install scripts and do not ask the user to configure a path before trying the resolver below.** Locate and invoke the bundled binary in the following order:
+1. Direct command if available in PATH: `officecli` or `officecli.exe`.
+2. On Windows, resolve the packaged binary with PowerShell:
+
+   ```powershell
+   $candidates = @(
+     (Get-Command officecli.exe -ErrorAction SilentlyContinue).Source,
+     "$env:LOCALAPPDATA\Programs\AionUi\resources\officecli.exe",
+     "$env:ProgramFiles\AionUi\resources\officecli.exe",
+     "${env:ProgramFiles(x86)}\AionUi\resources\officecli.exe",
+     "$env:LOCALAPPDATA\OfficeCli\officecli.exe",
+     ".\resources\officecli.exe",
+     "..\resources\officecli.exe"
+   )
+
+   $officecli = $candidates |
+     Where-Object { $_ -and (Test-Path -LiteralPath $_) } |
+     Select-Object -First 1
+
+   if (-not $officecli) {
+     $aionui = Get-Process -Name AionUi -ErrorAction SilentlyContinue |
+       Select-Object -First 1 -ExpandProperty Path
+     if ($aionui) {
+       $candidate = Join-Path (Split-Path $aionui) 'resources\officecli.exe'
+       if (Test-Path -LiteralPath $candidate) { $officecli = $candidate }
+     }
+   }
+
+   if (-not $officecli) { throw '找不到 AionUi 内置 officecli.exe' }
+   $env:DOTNET_SYSTEM_GLOBALIZATION_INVARIANT = '1'
+   $env:DOTNET_SYSTEM_GLOBALIZATION_USENLS = '1'
+   & $officecli @args
+   ```
+
+   The packaged AionUi backend performs the same resolution automatically. The two .NET environment variables are required on Windows 7 to avoid the ICU load failure.
+3. macOS / Linux: `/Applications/AionUi.app/Contents/Resources/officecli` or `~/.local/bin/officecli`.
 
 ---
 

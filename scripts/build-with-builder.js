@@ -616,16 +616,42 @@ const packOnly = args.includes('--pack-only');
 const forceBuild = args.includes('--force');
 const isWin7 = args.includes('--win7') || process.env.ELECTRON_WIN7 === '1';
 
+// `signAndEditExecutable=false` disables electron-builder's resource editor
+// completely. On Windows that also means the generated executable keeps the
+// stock Electron icon, even though `win.icon` points at AionUI's ICO file.
+// Keep the requested unsigned-build use case, but retain resource editing so
+// local/Win7 packages always carry the checked-in AionUI icon and metadata.
+let replacedUnsafeIconFlag = false;
 const builderArgs = args
   .filter((arg) => {
     // Filter out 'auto', architecture flags, and special flags
     if (arg === 'auto') return false;
-    if (arg === '--skip-vite' || arg === '--skip-native' || arg === '--pack-only' || arg === '--force' || arg === '--win7') return false;
+    if (
+      arg === '--skip-vite' ||
+      arg === '--skip-native' ||
+      arg === '--pack-only' ||
+      arg === '--force' ||
+      arg === '--win7'
+    )
+      return false;
     if (archList.includes(arg)) return false;
     if (arg.startsWith('--') && archList.includes(arg.slice(2))) return false;
     return true;
   })
+  .map((arg) => {
+    if (arg === '--config.win.signAndEditExecutable=false') {
+      replacedUnsafeIconFlag = true;
+      return '--config.win.signExecutable=false';
+    }
+    return arg;
+  })
   .join(' ');
+
+if (replacedUnsafeIconFlag) {
+  console.log(
+    '🎨 Replaced --config.win.signAndEditExecutable=false with --config.win.signExecutable=false to preserve the AionUI executable icon.'
+  );
+}
 
 // Get target architecture from electron-builder.yml
 function getTargetArchFromConfig(platform) {
@@ -773,10 +799,10 @@ try {
   const targetPlatform = builderArgs.includes('--win')
     ? 'win32'
     : builderArgs.includes('--mac')
-    ? 'darwin'
-    : builderArgs.includes('--linux')
-    ? 'linux'
-    : process.platform;
+      ? 'darwin'
+      : builderArgs.includes('--linux')
+        ? 'linux'
+        : process.platform;
   if (targetPlatform === 'win32' && !process.env.AIONUI_BACKEND_LOCAL_BUNDLE_DIR) {
     const localBundle = path.join(projectRoot, 'resources/bundled-aioncore-local/win32-x64');
     if (fs.existsSync(localBundle)) {
@@ -874,6 +900,10 @@ try {
 
   const isWindowsBuild = builderArgs.includes('--win') || builderArgs.includes('--all');
   let win7DistArg = '';
+  // Always keep electron-builder's PE resource editor enabled for Windows.
+  // Without it, the packaged executable retains Electron's stock icon even
+  // though electron-builder.yml points at resources/app.ico.
+  const winResourceEditArg = isWindowsBuild ? ' --config.win.signAndEditExecutable=true' : '';
   let officecliResourceArg = '';
   if (isWindowsBuild) {
     patchElectronBuilderNsisInstaller();
@@ -901,7 +931,7 @@ try {
     }
   }
 
-  const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${win7DistArg} ${publishArg}`;
+  const builderCommand = `bunx electron-builder --config packages/desktop/electron-builder.yml ${builderArgs} ${archFlag} ${nsisInclude} ${win7DistArg}${winResourceEditArg} ${publishArg}`;
   try {
     buildWithDmgRetry(builderCommand, targetArch);
   } catch (error) {
@@ -925,18 +955,20 @@ try {
           .join('\n')
       );
     }
-    console.log('   Retrying local build with win.signAndEditExecutable=false...');
-    console.log('   This fallback is intended for transient rcedit / file-lock failures on developer machines.');
+    console.log('   Retrying local build with win.signExecutable=false...');
+    console.log(
+      '   This fallback skips code signing but keeps resource editing, so the AionUI icon and metadata remain applied.'
+    );
     killWindowsProcesses(['AionUi.exe', 'electron.exe']);
     cleanupWindowsPackOutput();
 
     try {
-      buildWithDmgRetry(`${builderCommand} --config.win.signAndEditExecutable=false`, targetArch);
+      buildWithDmgRetry(`${builderCommand} --config.win.signExecutable=false`, targetArch);
     } catch (retryError) {
       const retryFailure = formatExecError(retryError);
       throw new Error(
         [
-          'Windows local retry with win.signAndEditExecutable=false also failed.',
+          'Windows local retry with win.signExecutable=false also failed.',
           'First failure:',
           firstError || String(error),
           'Retry failure:',

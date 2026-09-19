@@ -419,6 +419,11 @@ impl ProcessSpawner for DefaultProcessSpawner {
             .arg(file_path)
             .arg("--port")
             .arg(port.to_string())
+            // Windows 7 does not ship the ICU data expected by newer .NET
+            // runtimes. Keep the compatibility setting scoped to officecli;
+            // the desktop process itself must retain normal globalization.
+            .env("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "1")
+            .env("DOTNET_SYSTEM_GLOBALIZATION_USENLS", "1")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());

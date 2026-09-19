@@ -393,11 +393,13 @@ fn resolve_managed_entrypoint(
 
     match layout {
         ManagedNodeArchiveLayout::Windows => {
+            // The Windows Node distribution's npm package is required for
+            // npx-backed MCP servers. A wrapper-only directory can still pass
+            // `npm --version`/`npx --version` while its stub forwards the
+            // arguments directly to node, making `npx -y <package>` fail at
+            // runtime. Never accept that incomplete layout.
             if cli.is_file() {
                 return Ok((node_path.to_path_buf(), vec![cli.into_os_string()]));
-            }
-            if wrapper.is_file() {
-                return Ok((wrapper, vec![]));
             }
         }
         ManagedNodeArchiveLayout::Unix => {

@@ -171,17 +171,14 @@ const AionrsSendBox: React.FC<{
   }, [current_model]);
 
   const { thought, running, turnStartedAtMs, setActiveMsgId, setWaitingResponse, resetState, tokenUsage } =
-    useAionrsMessage(
-      conversation_id,
-      {
-        onConfigChanged: (capabilities) => {
-          const modes = (capabilities as { modes?: string[] })?.modes;
-          if (modes && modes.length > 0) {
-            setDynamicModes(modeOptionsFromCapabilities(modes));
-          }
-        },
-      }
-    );
+    useAionrsMessage(conversation_id, {
+      onConfigChanged: (capabilities) => {
+        const modes = (capabilities as { modes?: string[] })?.modes;
+        if (modes && modes.length > 0) {
+          setDynamicModes(modeOptionsFromCapabilities(modes));
+        }
+      },
+    });
   const runtimeView = useConversationRuntimeView(conversation_id);
   const { markSendStarted, markSendAccepted, markSendFailed } = runtimeView;
 
@@ -216,7 +213,17 @@ const AionrsSendBox: React.FC<{
   const runtimeThoughtLevel = runtimeConfig.thoughtLevel;
 
   const currentModelName = current_model?.use_model;
-  const currentModelSettings = currentModelName ? current_model?.model_settings?.[currentModelName] : undefined;
+  const currentModelSettings = useMemo(() => {
+    if (!currentModelName) return undefined;
+    // A newly created conversation can render before the runtime has loaded
+    // config options and before its model snapshot contains the latest
+    // provider settings. Fall back to the live provider list so the checked
+    // `thought_levels` still appear in the first send box render.
+    const snapshotSettings = current_model?.model_settings?.[currentModelName];
+    if (snapshotSettings) return snapshotSettings;
+    const liveProvider = modelSelection.providers.find((provider) => provider.id === current_model?.id);
+    return liveProvider?.model_settings?.[currentModelName];
+  }, [currentModelName, current_model?.id, current_model?.model_settings, modelSelection.providers]);
 
   const availableThoughtLevels = useMemo(() => {
     if (!currentModelName) return [];
@@ -895,10 +902,7 @@ const AionrsSendBox: React.FC<{
           <div className='flex items-center gap-8px min-w-0'>
             {!isMobile && (
               <>
-                <AionrsModelSelector
-                  selection={modelSelection}
-                  thoughtLevel={null}
-                />
+                <AionrsModelSelector selection={modelSelection} thoughtLevel={null} />
                 {availableThoughtLevels.length > 0 && (
                   <ReasoningEffortSelector
                     value={effectiveThoughtLevel}
@@ -994,11 +998,8 @@ const AionrsSendBox: React.FC<{
                 {t('team.interruptAndSend')}
               </Button>
             ) : undefined}
-            {(effectiveContextLimit > 0 || tokenUsage) ? (
-              <ContextUsageIndicator
-                tokenUsage={tokenUsage}
-                context_limit={effectiveContextLimit}
-              />
+            {effectiveContextLimit > 0 || tokenUsage ? (
+              <ContextUsageIndicator tokenUsage={tokenUsage} context_limit={effectiveContextLimit} />
             ) : undefined}
           </>
         }

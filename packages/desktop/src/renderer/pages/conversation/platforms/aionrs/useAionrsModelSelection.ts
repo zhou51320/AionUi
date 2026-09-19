@@ -27,11 +27,26 @@ export const useAionrsModelSelection = ({
 }: UseAionrsModelSelectionOptions): AionrsModelSelection => {
   const [current_model, setCurrentModel] = useState<TProviderWithModel | undefined>(initialModel);
 
-  useEffect(() => {
-    setCurrentModel(initialModel);
-  }, [initialModel?.id, initialModel?.use_model]);
-
   const { providers: allProviders, getAvailableModels, formatModelLabel } = useModelProviderList();
+
+  // A conversation stores a snapshot of the selected provider.  Provider
+  // settings (including the explicitly checked reasoning levels) can change
+  // after that snapshot was created, so merge the live provider record into
+  // the selection whenever the provider list refreshes.  Without this, the
+  // send box keeps reading stale `model_settings` and the reasoning picker
+  // appears to be unavailable until a new conversation is created.
+  useEffect(() => {
+    setCurrentModel((previous) => {
+      if (!initialModel) return undefined;
+      const liveProvider = allProviders.find((provider) => provider.id === initialModel.id);
+      if (!liveProvider) return initialModel;
+
+      return {
+        ...liveProvider,
+        use_model: initialModel.use_model || previous?.use_model || liveProvider.models[0] || '',
+      };
+    });
+  }, [allProviders, initialModel?.id, initialModel?.use_model]);
 
   // AionCore does not support Google Auth — filter it out
   const providers = useMemo(

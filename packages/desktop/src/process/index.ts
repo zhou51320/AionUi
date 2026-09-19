@@ -16,8 +16,11 @@ import { app } from 'electron';
 if (app.isPackaged) {
   process.env.PREBUILDS_ONLY = '1';
 }
-// Force .NET executables (such as officecli) to use Windows NLS instead of ICU on Windows 7
+// Force .NET executables (such as officecli) to avoid ICU on Windows 7. The
+// variables are inherited by officecli children; the Electron process itself
+// does not use .NET globalization.
 if (process.platform === 'win32') {
+  process.env.DOTNET_SYSTEM_GLOBALIZATION_INVARIANT = '1';
   process.env.DOTNET_SYSTEM_GLOBALIZATION_USENLS = '1';
 }
 import initStorage from './utils/initStorage';

@@ -83,22 +83,28 @@ fn resolve_known_officecli_install_path_from_env(
 ) -> Option<PathBuf> {
     let mut candidates = Vec::new();
 
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(parent) = current_exe.parent() {
-            candidates.push(parent.join("officecli.exe"));
-            candidates.push(parent.join("resources").join("officecli.exe"));
-            if let Some(grandparent) = parent.parent() {
-                candidates.push(grandparent.join("resources").join("officecli.exe"));
-                if let Some(great_grandparent) = grandparent.parent() {
-                    candidates.push(great_grandparent.join("officecli.exe"));
-                    candidates.push(great_grandparent.join("resources").join("officecli.exe"));
-                }
+    if let Ok(current_exe) = std::env::current_exe()
+        && let Some(parent) = current_exe.parent()
+    {
+        candidates.push(parent.join("officecli.exe"));
+        candidates.push(parent.join("resources").join("officecli.exe"));
+        if let Some(grandparent) = parent.parent() {
+            candidates.push(grandparent.join("resources").join("officecli.exe"));
+            if let Some(great_grandparent) = grandparent.parent() {
+                candidates.push(great_grandparent.join("officecli.exe"));
+                candidates.push(great_grandparent.join("resources").join("officecli.exe"));
             }
         }
     }
 
     if let Some(local_app_data) = local_app_data {
-        candidates.push(PathBuf::from(local_app_data).join("Programs").join("AionUi").join("resources").join("officecli.exe"));
+        candidates.push(
+            PathBuf::from(local_app_data)
+                .join("Programs")
+                .join("AionUi")
+                .join("resources")
+                .join("officecli.exe"),
+        );
         candidates.push(PathBuf::from(local_app_data).join("OfficeCli").join("officecli.exe"));
     }
 

@@ -13,6 +13,7 @@ use aionui_api_types::{
 use aionui_common::ProviderWithModel;
 use aionui_db::IMcpServerRepository;
 use aionui_db::models::McpServerRow;
+use aionui_mcp::is_builtin_browser_launcher;
 use aionui_realtime::EventBroadcaster;
 use aionui_runtime::ensure_runtime_command_with_reporter;
 use serde_json::{Map, Value};
@@ -187,11 +188,18 @@ pub(super) async fn build(
         .or_else(|| overrides.context_limit)
         .or_else(|| row.context_limit.map(|v| v as usize));
 
-    let thought_level = overrides
-        .thought_level
-        .clone()
-        .or_else(|| model_overrides.thought_level.clone())
-        .or_else(|| default_thought_level(model_overrides.thought_levels.as_deref()));
+    // `auto` is an explicit model default, not a reasoning effort value. Keep
+    // it distinct from an omitted setting so an explicit auto default does
+    // not get replaced by the first fallback level (usually medium).
+    let thought_level = match overrides.thought_level.as_deref() {
+        Some("auto") => None,
+        Some(_) => overrides.thought_level.clone(),
+        None => match model_overrides.thought_level.as_deref() {
+            Some("auto") => None,
+            Some(_) => model_overrides.thought_level.clone(),
+            None => default_thought_level(model_overrides.thought_levels.as_deref()),
+        },
+    };
 
     let config = AionrsResolvedConfig {
         provider,
@@ -857,7 +865,12 @@ async fn ensure_stdio_launch(
     broadcaster: Arc<dyn aionui_realtime::EventBroadcaster>,
 ) -> Result<(String, Vec<String>, HashMap<String, String>), String> {
     let reporter = conversation_runtime_reporter(broadcaster, user_id.to_owned(), conversation_id.to_owned());
-    let resolved = ensure_runtime_command_with_reporter(command, Some(reporter.as_ref()))
+    let launch_command = if is_builtin_browser_launcher(args) {
+        "node"
+    } else {
+        command
+    };
+    let resolved = ensure_runtime_command_with_reporter(launch_command, Some(reporter.as_ref()))
         .await
         .map_err(|error| error.to_string())?;
 

@@ -56,6 +56,26 @@ fn omitted_image_input_in_a_model_entry_keeps_catalog_automatic() {
 }
 
 #[test]
+fn model_settings_keep_auto_default_separate_from_reasoning_levels() {
+    let overrides = resolve_model_compat_overrides(
+        "deepseek-reasoner",
+        r#"{
+            "deepseek-reasoner": {
+                "thought_level": "auto",
+                "thought_levels": ["off", "low", "medium", "high"]
+            }
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(overrides.thought_level.as_deref(), Some("auto"));
+    assert_eq!(
+        overrides.thought_levels,
+        Some(vec!["off".into(), "low".into(), "medium".into(), "high".into()])
+    );
+}
+
+#[test]
 fn invalid_model_settings_are_rejected() {
     let result = resolve_model_compat_overrides("gpt-5.6-sol", "not-json");
 

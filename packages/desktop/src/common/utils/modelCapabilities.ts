@@ -107,7 +107,8 @@ export const updateModelSettings = (
   const next = { ...current };
 
   for (const modelId of modelIds) {
-    const isAutoLimit = contextLimit === undefined || contextLimit === 'auto' || (typeof contextLimit === 'number' && contextLimit <= 0);
+    const isAutoLimit =
+      contextLimit === undefined || contextLimit === 'auto' || (typeof contextLimit === 'number' && contextLimit <= 0);
     // `undefined` means that the user left reasoning capability detection on
     // automatic. An explicitly supplied empty array is different: it means
     // the user intentionally disabled all reasoning levels and must survive a
@@ -123,7 +124,15 @@ export const updateModelSettings = (
     if (imageInput !== 'auto') settings.image_input = imageInput;
     if (openAiApiMode !== 'auto') settings.openai_api_mode = openAiApiMode;
     if (!isAutoLimit && typeof contextLimit === 'number') settings.context_limit = contextLimit;
-    if (!isAutoThought && thoughtLevel && thoughtLevel !== 'auto') settings.thought_level = thoughtLevel;
+    // Keep the default separate from the supported-level list. In particular,
+    // an explicit `auto` default must survive saving a non-empty list; omitting
+    // it makes the AionCore factory choose its fallback level on the next
+    // conversation.
+    if (hasThoughtLevels && thoughtLevel !== undefined) {
+      settings.thought_level = thoughtLevel;
+    } else if (!isAutoThought && thoughtLevel && thoughtLevel !== 'auto') {
+      settings.thought_level = thoughtLevel;
+    }
     if (hasThoughtLevels) settings.thought_levels = thoughtLevels as ModelThoughtLevel[];
     next[modelId] = settings;
   }
@@ -138,10 +147,7 @@ export const updateModelSettings = (
  * Models must explicitly opt in through model settings. A name-based guess can
  * expose a selector for providers that do not accept reasoning parameters.
  */
-export const resolveModelThoughtLevels = (
-  modelName: string,
-  modelSettings?: ModelSettings
-): ModelThoughtLevel[] => {
+export const resolveModelThoughtLevels = (modelName: string, modelSettings?: ModelSettings): ModelThoughtLevel[] => {
   if (modelSettings?.thought_levels && modelSettings.thought_levels.length > 0) {
     return modelSettings.thought_levels;
   }

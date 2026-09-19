@@ -24,7 +24,7 @@ pub use routes::{McpRouterState, mcp_routes};
 pub use service::McpConfigService;
 pub use session_injection::{
     AcpMcpCapabilities, AcpSessionMcpServer, ImageGenConfig, NameValuePair, build_builtin_image_gen_server,
-    build_session_mcp_servers, parse_acp_mcp_capabilities,
+    build_session_mcp_servers, is_builtin_browser_launcher, parse_acp_mcp_capabilities,
 };
 pub use sync_service::McpSyncService;
 pub use types::{McpServer, McpServerTransport, McpTool};
