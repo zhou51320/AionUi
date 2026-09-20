@@ -125,7 +125,7 @@ NODE
 4. Win7 SP1 x64 真机可以启动、登录、恢复会话、读写文件并打开 docx/xlsx/pptx 预览。
 5. officecli 启动不再出现 `Could not load ICU data. UErrorCode: 2`。
 
-本轮 Linux 便携包已生成：`out/AionUi-2.2.2-win-x64.zip`（SHA-256：`5398a114510021e448c7645936fcb68f4abd055d16c2732326a1be5572985f64`）。
+本轮 Linux 便携包已生成：`out/AionUi-2.2.2-win-x64.zip`（SHA-256：`9a33ac7de3fe4995d8e8aba6e0a766a9963ae5bed1111f72f00585e1a4e98e4f`）。包内 AionCore 来自 Action `35503847266`（SHA-256：`b2307725c8f12a2b162ddaeb099a0197d43a184ddc879cccdf673a771b9a002a`）。
 
 ## 相对官方上游的本地改动
 
