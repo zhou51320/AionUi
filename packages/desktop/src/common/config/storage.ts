@@ -232,6 +232,8 @@ export interface TokenUsageData {
   breakdown?: TokenUsageBreakdown;
   /** Cumulative session cost as reported by the agent */
   cost?: TokenUsageCost;
+  /** Average generated-token throughput for the completed turn. */
+  tokens_per_second?: number;
 }
 
 export type TChatConversation =

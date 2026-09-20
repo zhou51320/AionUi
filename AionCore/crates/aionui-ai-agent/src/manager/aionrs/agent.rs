@@ -520,7 +520,32 @@ impl IAgentTask for AionrsAgentManager {
         self.runtime.bump_activity();
 
         let send_result = match result {
-            Some(Ok(_)) => {
+            Some(Ok(result)) => {
+                // Aionrs owns the context accounting state, so publish the
+                // same usage shape consumed by the ACP renderer.  The
+                // context usage is the best-known occupancy for the next
+                // request (provider-reported when available, otherwise the
+                // local projection maintained by aion-agent).
+                let context = engine.context_status();
+                let mut usage = serde_json::json!({
+                    "used": context.context_usage,
+                    "size": context.context_window,
+                    "_meta": {
+                        "input_tokens": result.usage.input_tokens,
+                        "output_tokens": result.usage.output_tokens,
+                        "cached_read_tokens": result.usage.cache_read_tokens,
+                        "cached_write_tokens": result.usage.cache_creation_tokens,
+                        "duration_ms": elapsed_ms,
+                    },
+                });
+                // Keep the raw counters available to older renderer builds
+                // which still read them from the terminal frame.
+                usage["input_tokens"] = serde_json::json!(result.usage.input_tokens);
+                usage["output_tokens"] = serde_json::json!(result.usage.output_tokens);
+                let _ = self
+                    .runtime
+                    .event_sender()
+                    .send(AgentStreamEvent::AcpContextUsage(usage));
                 info!(
                     conversation_id = %self.runtime.conversation_id(),
                     elapsed_ms,

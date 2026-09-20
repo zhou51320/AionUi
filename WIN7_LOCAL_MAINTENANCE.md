@@ -167,6 +167,7 @@ DOTNET_SYSTEM_GLOBALIZATION_USENLS=1
 - MCP 启动迁移会修复已有 `chrome-devtools` 数据库记录中的 `@latest` 或旧 JSON，不要求用户手动删除并重新导入。
 - aionrs 思考参数回归：`off/low/medium/high` 在后端分别转换为 `disabled/enabled + thinking_budget`，不再把 UI 值直接传给严格的 `--thinking` 解析器。
 - MCP Node 回归：补齐 Win32 managed Node 的 npm/npx CLI 文件，并在连接检测、ACP、AionRS 和统一 session 注入入口统一识别浏览器 wrapper。
+- Aionrs 上下文用量回归：每轮结束上报当前上下文占用、窗口上限、输入/输出 token 和耗时；桌面指示器只显示环形进度，详情弹层显示平均输出速度（tokens/s）。
 - 验证：`cargo test -p aionui-office` 的 104 个单元测试通过；代理集成测试因当前 Linux 环境端口/代理返回 503，未作为本次回归判定依据。
 
 ## 同步官方最新源码

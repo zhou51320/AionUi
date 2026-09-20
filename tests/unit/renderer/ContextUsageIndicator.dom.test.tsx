@@ -55,6 +55,7 @@ describe('ContextUsageIndicator', () => {
     expect(progressSvg?.getAttribute('width')).toBe('20');
     expect(progressSvg?.getAttribute('height')).toBe('20');
     expect(container.querySelectorAll('circle')).toHaveLength(2);
+    expect(progressSvg?.querySelector('text')).toBeNull();
     const popover = getByTestId('popover-content').textContent ?? '';
     expect(popover).toContain('4.8%');
     expect(popover).toContain('12.6K / 262.1K');
@@ -92,6 +93,7 @@ describe('ContextUsageIndicator', () => {
             cached_read_tokens: 14_080,
             thought_tokens: 0,
           },
+          tokens_per_second: 12.5,
         }}
         context_limit={1_000_000}
       />
@@ -103,6 +105,7 @@ describe('ContextUsageIndicator', () => {
     expect(popover).toContain('输入14.1K');
     expect(popover).toContain('输出30');
     expect(popover).toContain('缓存读取14.1K');
+    expect(popover).toContain('平均速度12.5 tokens/s');
     // Zero-valued optional counters are noise, not information.
     expect(popover).not.toContain('Thinking');
   });

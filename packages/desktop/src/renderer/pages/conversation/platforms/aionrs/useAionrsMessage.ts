@@ -23,6 +23,19 @@ type TokenUsage = {
   output_tokens?: number;
 };
 
+type AionrsContextUsage = {
+  used: number;
+  size?: number;
+  _meta?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    thought_tokens?: number;
+    cached_read_tokens?: number;
+    cached_write_tokens?: number;
+    duration_ms?: number;
+  };
+};
+
 export const useAionrsMessage = (
   conversation_id: string,
   options?: {
@@ -259,6 +272,43 @@ export const useAionrsMessage = (
           }
           throttledSetThought(message.data as ThoughtData);
           break;
+        case 'acp_context_usage': {
+          const usageData = message.data as AionrsContextUsage | undefined;
+          if (usageData && typeof usageData.used === 'number') {
+            const meta = usageData._meta;
+            const breakdown = meta
+              ? {
+                  ...(typeof meta.input_tokens === 'number' ? { input_tokens: meta.input_tokens } : {}),
+                  ...(typeof meta.output_tokens === 'number' ? { output_tokens: meta.output_tokens } : {}),
+                  ...(typeof meta.thought_tokens === 'number' ? { thought_tokens: meta.thought_tokens } : {}),
+                  ...(typeof meta.cached_read_tokens === 'number'
+                    ? { cached_read_tokens: meta.cached_read_tokens }
+                    : {}),
+                  ...(typeof meta.cached_write_tokens === 'number'
+                    ? { cached_write_tokens: meta.cached_write_tokens }
+                    : {}),
+                }
+              : undefined;
+            const outputTokens = meta?.output_tokens ?? 0;
+            const durationSeconds = (meta?.duration_ms ?? 0) / 1000;
+            const tokensPerSecond =
+              durationSeconds > 0 && outputTokens > 0 ? outputTokens / durationSeconds : undefined;
+            const newTokenUsage: TokenUsageData = {
+              total_tokens: usageData.used,
+              ...(breakdown && Object.keys(breakdown).length > 0 ? { breakdown } : {}),
+              ...(tokensPerSecond && Number.isFinite(tokensPerSecond) ? { tokens_per_second: tokensPerSecond } : {}),
+            };
+            setTokenUsage(newTokenUsage);
+            void ipcBridge.conversation.update.invoke({
+              id: conversation_id,
+              updates: {
+                extra: { last_token_usage: newTokenUsage } as TChatConversation['extra'],
+              },
+              merge_extra: true,
+            });
+          }
+          break;
+        }
         case 'start':
           setStreamRunning(true);
           streamRunningRef.current = true;

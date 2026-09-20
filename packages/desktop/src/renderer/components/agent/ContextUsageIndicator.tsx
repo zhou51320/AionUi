@@ -86,14 +86,6 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
   const clampedPercentage = Math.min(100, Math.max(0, percentage));
   const strokeDashoffset = circumference - (clampedPercentage / 100) * circumference;
 
-  // Center text (9px, max 99% to avoid overflow)
-  const centerText = useMemo(() => {
-    if (!hasWindow) return '•';
-    if (percentage >= 99.5) return '99%';
-    if (percentage > 0 && percentage < 1) return '<1%';
-    return `${Math.round(percentage)}%`;
-  }, [hasWindow, percentage]);
-
   const breakdown = tokenUsage?.breakdown;
 
   // Layer 2: Expanded Card (ContextCard) - 280px wide
@@ -202,6 +194,15 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
             <span className='text-t-primary font-medium'>≈ {formatCostAmount(tokenUsage.cost, locale)}</span>
           </div>
         )}
+
+        {tokenUsage?.tokens_per_second && tokenUsage.tokens_per_second > 0 && (
+          <div className='flex items-center justify-between'>
+            <span className='text-t-secondary'>{t('conversation.contextUsage.tokenSpeed', '平均速度')}</span>
+            <span className='text-t-primary font-medium'>
+              {formatNumber(tokenUsage.tokens_per_second, locale, { maximumFractionDigits: 1 })} tokens/s
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -259,19 +260,6 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
               }}
             />
           )}
-          {/* Center Percentage Label */}
-          <text
-            x={10}
-            y={10.5}
-            textAnchor='middle'
-            dominantBaseline='central'
-            fontSize='9'
-            fontWeight='600'
-            fill='var(--color-text-1, #374151)'
-            style={{ pointerEvents: 'none' }}
-          >
-            {centerText}
-          </text>
         </svg>
       </div>
     </Popover>
