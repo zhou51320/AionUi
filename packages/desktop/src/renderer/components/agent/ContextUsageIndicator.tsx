@@ -34,7 +34,7 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
   context_limit,
   cacheStats,
   className = '',
-  size = 20,
+  size = 32,
 }) => {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -48,7 +48,7 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
       return {
         percentage: 0,
         displayTotal: '0',
-        displayLimit: '0',
+        displayLimit: hasWindow ? formatTokenCount(context_limit, locale, true) : '0',
         tierColor: '#3B82F6',
       };
     }
@@ -79,10 +79,6 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
     };
   }, [tokenUsage, context_limit, hasWindow, locale]);
 
-  if (!tokenUsage) {
-    return null;
-  }
-
   // Ring geometry: 20x20 outer box, 16px circle diameter (radius 8), 2px stroke
   const strokeWidth = 2;
   const radius = 8;
@@ -98,7 +94,7 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
     return `${Math.round(percentage)}%`;
   }, [hasWindow, percentage]);
 
-  const breakdown = tokenUsage.breakdown;
+  const breakdown = tokenUsage?.breakdown;
 
   // Layer 2: Expanded Card (ContextCard) - 280px wide
   const popoverCard = (
@@ -117,7 +113,9 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
             {t('conversation.contextUsage.contextWindow', '上下文窗口')}
           </span>
           <span className='text-13px font-bold' style={{ color: tierColor }}>
-            {hasWindow ? `${percentage.toFixed(1)}%` : t('conversation.contextUsage.unknown', '未知')}
+            {hasWindow
+              ? `${formatNumber(percentage, locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+              : t('conversation.contextUsage.unknown', '未知')}
           </span>
         </div>
 
@@ -198,7 +196,7 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
           </span>
         </div>
 
-        {tokenUsage.cost && (
+        {tokenUsage?.cost && (
           <div className='flex items-center justify-between'>
             <span className='text-t-secondary'>{t('conversation.contextUsage.sessionCost', '会话成本')}</span>
             <span className='text-t-primary font-medium'>≈ {formatCostAmount(tokenUsage.cost, locale)}</span>
@@ -232,7 +230,7 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
           setPopoverVisible(nextPinned ? true : false);
         }}
       >
-        <svg width={size} height={size} viewBox='0 0 20 20' className='overflow-visible'>
+        <svg width={20} height={20} viewBox='0 0 20 20' className='overflow-visible'>
           {/* Background Ring */}
           <circle
             cx={10}

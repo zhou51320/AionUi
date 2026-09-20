@@ -119,7 +119,7 @@ win:
   icon: resources/app.ico # Use the checked-in Windows icon resource for executable metadata/icon patching
   artifactName: ${productName}-${version}-${os}-${arch}.${ext}
   extraResources:
-    - from: resources/officecli-win-x64.exe
+    - from: resources/officecli.exe
       to: officecli.exe
     - from: resources/officecli.runtimeconfig.json
       to: officecli.runtimeconfig.json

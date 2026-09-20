@@ -11,7 +11,7 @@
 - 主要本地包：`out/AionUi-*-win-x64.*`；独立 CLI 产物为 `aioncore-win7-x64.zip`。
 - 图标：Windows 可执行文件必须使用仓库中的 `resources/app.ico`（AionUI 图标），禁止保留 Win7 Electron 默认图标。
 
-未跟踪的 `aioncore.exe`、`officecli-win-x64.exe`、`aioncore-win7-x64.zip` 和 `resources/bundled-aioncore-local/` 属于本地构建产物，除非用户明确要求，不要删除或提交。
+未跟踪的 `aioncore.exe`、`officecli-win-x64.exe`、`aioncore-win7-x64.zip` 和 `resources/bundled-aioncore-local/` 属于本地构建产物，除非用户明确要求，不要删除或提交；发布源资源使用已纳入仓库的 `resources/officecli.exe`。
 
 ## 构建与打包
 

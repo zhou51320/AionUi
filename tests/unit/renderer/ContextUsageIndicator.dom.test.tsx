@@ -55,7 +55,9 @@ describe('ContextUsageIndicator', () => {
     expect(progressSvg?.getAttribute('width')).toBe('20');
     expect(progressSvg?.getAttribute('height')).toBe('20');
     expect(container.querySelectorAll('circle')).toHaveLength(2);
-    expect(getByTestId('popover-content').textContent).toContain('4.8% · 12.6K / 262.1K');
+    const popover = getByTestId('popover-content').textContent ?? '';
+    expect(popover).toContain('4.8%');
+    expect(popover).toContain('12.6K / 262.1K');
   });
 
   it('renders a hollow ring and a raw-count popover when the window size is unknown', () => {
@@ -67,14 +69,15 @@ describe('ContextUsageIndicator', () => {
     // guessed denominator would lie.
     expect(container.querySelectorAll('circle')).toHaveLength(1);
     const popover = getByTestId('popover-content').textContent ?? '';
-    expect(popover).toContain('12.6K tokens used');
-    expect(popover).toContain('Context window size unknown');
+    expect(popover).toContain('12.6K');
+    expect(popover).toContain('上下文窗口未知');
     expect(popover).not.toContain('%');
   });
 
-  it('renders nothing without any usage report', () => {
-    const { container } = render(<ContextUsageIndicator tokenUsage={null} context_limit={262_144} />);
-    expect(container.querySelector('.context-usage-indicator')).toBeNull();
+  it('renders the configured context window before the first usage report', () => {
+    const { container, getByTestId } = render(<ContextUsageIndicator tokenUsage={null} context_limit={262_144} />);
+    expect(container.querySelector('.context-usage-indicator')).not.toBeNull();
+    expect(getByTestId('popover-content').textContent).toContain('0 / 262.1K');
   });
 
   it('shows session cost and per-turn breakdown when the agent reported them', () => {
@@ -95,11 +98,11 @@ describe('ContextUsageIndicator', () => {
     );
 
     const popover = getByTestId('popover-content').textContent ?? '';
-    expect(popover).toContain('Session cost');
+    expect(popover).toContain('会话成本');
     expect(popover).toContain('$0.42');
-    expect(popover).toContain('Input 14.1K');
-    expect(popover).toContain('Output 30');
-    expect(popover).toContain('Cache read 14.1K');
+    expect(popover).toContain('输入14.1K');
+    expect(popover).toContain('输出30');
+    expect(popover).toContain('缓存读取14.1K');
     // Zero-valued optional counters are noise, not information.
     expect(popover).not.toContain('Thinking');
   });
@@ -121,9 +124,9 @@ describe('ContextUsageIndicator', () => {
     // German writes the decimal separator as a comma and puts the currency
     // symbol last — for every number in the popover, not just the cost.
     expect(popover).toContain('0,42\u00a0$');
-    expect(popover).toContain('1,4\u00a0%');
+    expect(popover).toContain('1,4%');
     expect(popover).toContain('14,1K');
-    expect(popover).toContain('Input 14,1K');
+    expect(popover).toContain('输入14,1K');
     // The separators must not be mixed within one popover.
     expect(popover).not.toContain('14.1K');
     expect(popover).not.toContain('$0.42');

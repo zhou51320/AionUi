@@ -925,7 +925,7 @@ Please check your local CLI tool authentication status`,
           // Agents reporting a window size (UsageUpdate.size) get a progress
           // ring; agents reporting only a token count get a hollow ring whose
           // popover shows the raw count — never a percentage against a
-          // guessed denominator. No usage report at all → nothing.
+          // guessed denominator. A configured context window is shown even before the first usage update.
           <>
             {teamRuntime?.onInterruptSend && content.trim() && (
               <Button
@@ -938,7 +938,9 @@ Please check your local CLI tool authentication status`,
                 {t('team.interruptAndSend')}
               </Button>
             )}
-            {tokenUsage ? <ContextUsageIndicator tokenUsage={tokenUsage} context_limit={context_limit} /> : undefined}
+            {context_limit > 0 || tokenUsage ? (
+              <ContextUsageIndicator tokenUsage={tokenUsage} context_limit={context_limit} />
+            ) : undefined}
           </>
         }
         onAddToDraft={handleAddToQueue}

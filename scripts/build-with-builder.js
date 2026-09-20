@@ -911,12 +911,13 @@ try {
 
     const candidateOfficecli = [
       path.resolve(__dirname, '../officecli-win-x64.exe'),
+      path.resolve(__dirname, '../resources/officecli.exe'),
       path.resolve(__dirname, '../resources/officecli-win-x64.exe'),
     ].find((p) => fs.existsSync(p));
 
     if (candidateOfficecli) {
       console.log(`📄 Found officecli binary at ${candidateOfficecli}`);
-      const targetInResources = path.resolve(__dirname, '../resources/officecli-win-x64.exe');
+      const targetInResources = path.resolve(__dirname, '../resources/officecli.exe');
       if (candidateOfficecli !== targetInResources) {
         fs.copyFileSync(candidateOfficecli, targetInResources);
       }
