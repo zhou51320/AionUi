@@ -338,7 +338,9 @@ async fn create_provider_persists_model_settings() {
     body["model_settings"] = json!({
         "gpt-5.6-sol": {
             "image_input": "supported",
-            "openai_api_mode": "responses"
+            "openai_api_mode": "responses",
+            "thought_levels": ["off", "low", "medium", "high", "xhigh"],
+            "thought_level": "high"
         }
     });
 
@@ -359,6 +361,14 @@ async fn create_provider_persists_model_settings() {
     assert_eq!(
         list_json["data"][0]["model_settings"]["gpt-5.6-sol"]["openai_api_mode"],
         "responses"
+    );
+    assert_eq!(
+        list_json["data"][0]["model_settings"]["gpt-5.6-sol"]["thought_levels"],
+        json!(["off", "low", "medium", "high", "xhigh"])
+    );
+    assert_eq!(
+        list_json["data"][0]["model_settings"]["gpt-5.6-sol"]["thought_level"],
+        "high"
     );
 }
 
@@ -494,7 +504,9 @@ async fn update_provider_replaces_model_settings() {
                 "model_settings": {
                     "gpt-4o": {
                         "image_input": "unsupported",
-                        "openai_api_mode": "chat_completions"
+                        "openai_api_mode": "chat_completions",
+                        "thought_levels": ["off", "low", "medium", "high", "xhigh"],
+                        "thought_level": "auto"
                     }
                 }
             }),
@@ -509,6 +521,11 @@ async fn update_provider_replaces_model_settings() {
         json["data"]["model_settings"]["gpt-4o"]["openai_api_mode"],
         "chat_completions"
     );
+    assert_eq!(
+        json["data"]["model_settings"]["gpt-4o"]["thought_levels"],
+        json!(["off", "low", "medium", "high", "xhigh"])
+    );
+    assert_eq!(json["data"]["model_settings"]["gpt-4o"]["thought_level"], "auto");
 }
 
 #[tokio::test]

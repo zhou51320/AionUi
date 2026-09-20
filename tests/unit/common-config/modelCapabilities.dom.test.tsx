@@ -659,6 +659,28 @@ describe('model capability selectors', () => {
     });
   });
 
+  it('uses the latest provider snapshot when opening an editor after a save', async () => {
+    const stale = provider({ model_settings: {} });
+    const latest = provider({ model_settings: { 'gpt-4o': { thought_levels: ['low', 'high'] } } });
+    mocks.listProviders.mockResolvedValueOnce([latest]);
+
+    render(
+      <AddModelModal
+        data={stale}
+        model='gpt-4o'
+        modalProps={{ visible: true }}
+        modalCtrl={{ close: mocks.close }}
+        onSubmit={mocks.onSubmit}
+      />
+    );
+
+    await waitFor(() => {
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(checkboxes[1]).toBeChecked();
+      expect(checkboxes[3]).toBeChecked();
+    });
+  });
+
   it('does not submit when provider data is unavailable', () => {
     mocks.modelListUnavailable = true;
     render(

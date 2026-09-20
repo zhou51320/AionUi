@@ -1,3 +1,4 @@
+import { ipcBridge } from '@/common';
 import type { IProvider } from '@/common/config/storage';
 import {
   type ModelImageInputChoice,
@@ -65,23 +66,36 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       if (initializedKeyRef.current === initializationKey) return;
       initializedKeyRef.current = initializationKey;
 
-      setResolvedData(data);
-      setModels([]);
-      const settings = editingModel ? data?.model_settings?.[editingModel] : undefined;
+      let cancelled = false;
+      const initialize = async () => {
+        // The settings list is SWR-backed and may still contain the pre-save
+        // provider immediately after a PUT. Refresh only for the initial
+        // opening of an editor; the initialization key below prevents a
+        // background provider refresh from resetting active checkbox edits.
+        let currentData = data;
+        if (editingModel && data?.id) {
+          try {
+            const providers = await ipcBridge.mode.listProviders.invoke();
+            currentData = providers?.find((provider) => provider.id === data.id) ?? data;
+          } catch (error) {
+            console.warn('[AddModelModal] failed to refresh provider before editing', error);
+          }
+        }
+        if (cancelled) return;
+
+        setResolvedData(currentData);
+        setModels([]);
+        const settings = editingModel ? currentData?.model_settings?.[editingModel] : undefined;
         setImageInput(settings?.image_input ?? 'auto');
         setOpenAiApiMode(settings?.openai_api_mode ?? 'auto');
 
         const savedThoughtLevels = settings?.thought_levels;
         if (savedThoughtLevels && savedThoughtLevels.length > 0) {
           setThoughtLevels(savedThoughtLevels as ModelThoughtLevelChoice[]);
-        } else if (Array.isArray(savedThoughtLevels)) {
-          setThoughtLevels([]);
-        } else if (editingModel && detectModelThoughtSupport(editingModel)) {
-          setThoughtLevels([]);
         } else {
           setThoughtLevels([]);
         }
-        setModelProtocol(editingModel ? (data?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
+        setModelProtocol(editingModel ? (currentData?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
 
         if (settings?.context_limit && settings.context_limit > 0) {
           setContextMode('custom');
@@ -90,6 +104,12 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
           setContextMode('auto');
           setCustomContextLimit(undefined);
         }
+      };
+
+      void initialize();
+      return () => {
+        cancelled = true;
+      };
     }, [data, editingModel, modalProps.visible]);
 
     const handleConfirm = useCallback(() => {
