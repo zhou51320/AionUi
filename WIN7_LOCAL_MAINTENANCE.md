@@ -91,9 +91,9 @@ NODE
 
 ## 思考强度协议
 
-聊天界面使用 `off/low/medium/high`，但 AionCore 内嵌的 aionrs 只接受
+聊天界面使用 `off/low/medium/high/xhigh`，但 AionCore 内嵌的 aionrs 只接受
 `--thinking enabled|disabled`。后端边界必须把 `off` 映射为 `disabled`，把其他强度映射为
-`enabled`，并分别用 `--thinking-budget` 保存 `0/2048/8192/16384`；`auto` 表示不传思考参数。
+`enabled`，并分别用 `--thinking-budget` 保存 `0/2048/8192/16384/32768`；`auto` 表示不传思考参数。
 禁止把 UI 的 `low`、`medium` 或 `high` 原样传给 aionrs，否则会触发
 `Invalid --thinking value` 并导致会话启动失败。修改模型设置后要验证设置页能够勾选多个强度，
 聊天输入框能显示并切换这些强度。
@@ -125,7 +125,7 @@ NODE
 4. Win7 SP1 x64 真机可以启动、登录、恢复会话、读写文件并打开 docx/xlsx/pptx 预览。
 5. officecli 启动不再出现 `Could not load ICU data. UErrorCode: 2`。
 
-本轮 Linux 便携包已生成：`out/AionUi-2.2.2-win-x64.zip`（SHA-256：`f47feb9fb9a1fa6161d42ab6c2d9e94ff35065cad9acedcfe131758e330b96b6`）。
+本轮 Linux 便携包已生成：`out/AionUi-2.2.2-win-x64.zip`（SHA-256：`5398a114510021e448c7645936fcb68f4abd055d16c2732326a1be5572985f64`）。
 
 ## 相对官方上游的本地改动
 
