@@ -1,5 +1,4 @@
 import type { IProvider } from '@/common/config/storage';
-import { ipcBridge } from '@/common';
 import {
   type ModelImageInputChoice,
   type ModelOpenAiApiModeChoice,
@@ -13,7 +12,7 @@ import ModalHOC from '@/renderer/utils/ui/ModalHOC';
 import AionModal from '@/renderer/components/base/AionModal';
 import { Checkbox, InputNumber, Radio, Select } from '@arco-design/web-react';
 import { PreviewOpen } from '@icon-park/react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useModeModeList from '@renderer/hooks/agent/useModeModeList';
 import {
@@ -30,11 +29,10 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     const [imageInput, setImageInput] = useState<ModelImageInputChoice>('auto');
     const [openAiApiMode, setOpenAiApiMode] = useState<ModelOpenAiApiModeChoice>('auto');
     const [thoughtLevels, setThoughtLevels] = useState<ModelThoughtLevelChoice[]>([]);
-    const [thoughtLevelsConfigured, setThoughtLevelsConfigured] = useState(false);
-    const [thoughtLevel, setThoughtLevel] = useState<ModelThoughtLevelChoice>('auto');
     const [contextMode, setContextMode] = useState<'auto' | 'custom'>('auto');
     const [customContextLimit, setCustomContextLimit] = useState<number | undefined>(undefined);
     const [resolvedData, setResolvedData] = useState<IProvider | undefined>(data);
+    const initializedKeyRef = useRef<string | null>(null);
     const isNewApi = isNewApiPlatform(data?.platform ?? '');
     const isEditing = Boolean(editingModel);
     const { data: modelList, isLoading } = useModeModeList(data?.platform, data?.base_url, data?.api_key);
@@ -58,47 +56,32 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     }, [modelList, data?.models]);
 
     useEffect(() => {
-      if (!modalProps.visible) return;
+      if (!modalProps.visible) {
+        initializedKeyRef.current = null;
+        return;
+      }
 
-      let cancelled = false;
+      const initializationKey = `${data?.id ?? 'new'}:${editingModel ?? 'new'}`;
+      if (initializedKeyRef.current === initializationKey) return;
+      initializedKeyRef.current = initializationKey;
+
       setResolvedData(data);
-      const initialize = async () => {
-        let currentData = data;
-        if (editingModel && data?.id) {
-          try {
-            const providers = await ipcBridge.mode.listProviders.invoke();
-            currentData = providers?.find((provider) => provider.id === data.id) ?? data;
-          } catch (error) {
-            console.warn('[AddModelModal] failed to refresh provider before editing', error);
-          }
-        }
-        if (cancelled) return;
-
-        setResolvedData(currentData);
-        setModels([]);
-        const settings = editingModel ? currentData?.model_settings?.[editingModel] : undefined;
+      setModels([]);
+      const settings = editingModel ? data?.model_settings?.[editingModel] : undefined;
         setImageInput(settings?.image_input ?? 'auto');
         setOpenAiApiMode(settings?.openai_api_mode ?? 'auto');
 
         const savedThoughtLevels = settings?.thought_levels;
         if (savedThoughtLevels && savedThoughtLevels.length > 0) {
           setThoughtLevels(savedThoughtLevels as ModelThoughtLevelChoice[]);
-          setThoughtLevelsConfigured(true);
         } else if (Array.isArray(savedThoughtLevels)) {
           setThoughtLevels([]);
-          setThoughtLevelsConfigured(true);
-        } else if (settings?.thought_level && settings.thought_level !== 'auto') {
-          setThoughtLevels([settings.thought_level as ModelThoughtLevelChoice]);
-          setThoughtLevelsConfigured(true);
         } else if (editingModel && detectModelThoughtSupport(editingModel)) {
           setThoughtLevels([]);
-          setThoughtLevelsConfigured(false);
         } else {
           setThoughtLevels([]);
-          setThoughtLevelsConfigured(false);
         }
-        setThoughtLevel(settings?.thought_level ?? 'auto');
-        setModelProtocol(editingModel ? (currentData?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
+        setModelProtocol(editingModel ? (data?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
 
         if (settings?.context_limit && settings.context_limit > 0) {
           setContextMode('custom');
@@ -107,12 +90,6 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
           setContextMode('auto');
           setCustomContextLimit(undefined);
         }
-      };
-
-      void initialize();
-      return () => {
-        cancelled = true;
-      };
     }, [data, editingModel, modalProps.visible]);
 
     const handleConfirm = useCallback(() => {
@@ -120,6 +97,10 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       if (!sourceData || (!editingModel && !models.length)) return;
       const targetModels = editingModel ? [editingModel] : models;
       const effectiveContextLimit = contextMode === 'auto' ? 'auto' : (customContextLimit ?? 'auto');
+      // The checked list is the source of truth. Always serialize it separately
+      // from the default value so `auto` can never replace or collapse it.
+      const normalizedThoughtLevels = [...new Set(thoughtLevels)];
+      const persistedThoughtLevels = normalizedThoughtLevels.length > 0 ? normalizedThoughtLevels : undefined;
 
       const updatedData: IProvider = {
         ...sourceData,
@@ -130,8 +111,8 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
           imageInput,
           showOpenAiApiMode ? openAiApiMode : 'auto',
           effectiveContextLimit,
-          thoughtLevel,
-          thoughtLevelsConfigured ? thoughtLevels : undefined
+          undefined,
+          persistedThoughtLevels
         ),
       };
 
@@ -158,21 +139,9 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       showOpenAiApiMode,
       contextMode,
       customContextLimit,
-      thoughtLevel,
       thoughtLevels,
-      thoughtLevelsConfigured,
       resolvedData,
     ]);
-
-    const toggleThoughtLevel = useCallback(
-      (level: ModelThoughtLevelChoice, checked: boolean) => {
-        const next = checked ? [...new Set([...thoughtLevels, level])] : thoughtLevels.filter((item) => item !== level);
-        setThoughtLevels(next);
-        setThoughtLevelsConfigured(true);
-        if (thoughtLevel !== 'auto' && !next.includes(thoughtLevel)) setThoughtLevel('auto');
-      },
-      [thoughtLevel, thoughtLevels]
-    );
 
     return (
       <AionModal
@@ -299,41 +268,18 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
               <div className='text-12px text-t-secondary'>
                 {t('settings.supportedThoughtLevels', '勾选该模型支持的思考强度 (聊天时可在输入框随时切换):')}
               </div>
-              <div className='flex flex-wrap gap-x-12px gap-y-6px'>
-                {(
-                  [
-                    ['off', t('agent.thoughtLevel.off', '关闭 (Off)')],
-                    ['low', t('agent.thoughtLevel.low', '低强度 (Low)')],
-                    ['medium', t('agent.thoughtLevel.medium', '中强度 (Medium)')],
-                    ['high', t('agent.thoughtLevel.high', '高强度 (High)')],
-                  ] as const
-                ).map(([value, label]) => (
-                  <Checkbox
-                    key={value}
-                    checked={thoughtLevels.includes(value)}
-                    onChange={(checked) => toggleThoughtLevel(value, checked)}
-                  >
-                    {label}
-                  </Checkbox>
-                ))}
-              </div>
+              <Checkbox.Group
+                options={[
+                  { label: t('agent.thoughtLevel.off', '关闭 (Off)'), value: 'off' },
+                  { label: t('agent.thoughtLevel.low', '低强度 (Low)'), value: 'low' },
+                  { label: t('agent.thoughtLevel.medium', '中强度 (Medium)'), value: 'medium' },
+                  { label: t('agent.thoughtLevel.high', '高强度 (High)'), value: 'high' },
+                  { label: t('agent.thoughtLevel.xhigh', '极高强度 (XHigh)'), value: 'xhigh' },
+                ]}
+                value={thoughtLevels}
+                onChange={(values) => setThoughtLevels(values as ModelThoughtLevelChoice[])}
+              />
             </div>
-            {thoughtLevels.length > 0 && (
-              <div className='space-y-6px pt-4px'>
-                <div className='text-12px text-t-secondary'>{t('settings.defaultThoughtLevel', '默认思考强度:')}</div>
-                <Select
-                  value={thoughtLevel}
-                  onChange={(val) => setThoughtLevel(val as ModelThoughtLevelChoice)}
-                  options={[
-                    { label: t('settings.modelSettingAuto', '自动 (Auto)'), value: 'auto' },
-                    ...thoughtLevels.map((lvl) => ({
-                      label: t(`agent.thoughtLevel.${lvl}`, lvl),
-                      value: lvl,
-                    })),
-                  ]}
-                />
-              </div>
-            )}
             <div className='text-11px text-t-secondary leading-4'>
               {isReasoningCapable
                 ? t(

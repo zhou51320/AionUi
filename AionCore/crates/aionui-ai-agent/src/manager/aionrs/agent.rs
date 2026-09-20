@@ -68,7 +68,7 @@ fn resolve_aionui_config(cli_args: &CliArgs) -> Result<Config, AgentError> {
 
 /// Convert AionUI's user-facing thought levels to the aionrs CLI protocol.
 ///
-/// The UI deliberately exposes four levels, while aionrs accepts only
+/// The UI deliberately exposes five levels, while aionrs accepts only
 /// `enabled`/`disabled` for `--thinking`; the level itself is represented by
 /// `--thinking-budget`. Keep this conversion at the backend boundary so a
 /// persisted UI value can never leak into aionrs' strict parser.
@@ -78,6 +78,7 @@ fn normalize_thinking_config(value: Option<&str>) -> (Option<String>, Option<u32
         Some("low") => (Some("enabled".to_owned()), Some(2_048)),
         Some("medium") => (Some("enabled".to_owned()), Some(8_192)),
         Some("high") => (Some("enabled".to_owned()), Some(16_384)),
+        Some("xhigh") => (Some("enabled".to_owned()), Some(32_768)),
         Some("on" | "enabled" | "true") => (Some("enabled".to_owned()), None),
         None | Some("") | Some("auto") => (None, None),
         // Do not pass an arbitrary persisted value to aionrs, which would
@@ -301,7 +302,7 @@ impl AionrsAgentManager {
         }
 
         let effort = match config_extra.thought_level.as_deref() {
-            Some("low" | "medium" | "high") => config_extra.thought_level.clone(),
+            Some("low" | "medium" | "high" | "xhigh") => config_extra.thought_level.clone(),
             _ => None,
         };
         engine.set_initial_reasoning_effort(effort);
@@ -718,7 +719,7 @@ impl AionrsAgentManager {
                 )));
             }
             let effort = match value {
-                "low" | "medium" | "high" => Some(value.to_string()),
+                "low" | "medium" | "high" | "xhigh" => Some(value.to_string()),
                 "off" => None,
                 _ => {
                     return Err(AgentError::bad_request(format!(

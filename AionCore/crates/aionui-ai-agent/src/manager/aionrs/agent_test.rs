@@ -84,6 +84,10 @@ fn normalize_thinking_config_maps_ui_levels_to_aionrs_protocol() {
         normalize_thinking_config(Some("high")),
         (Some("enabled".into()), Some(16_384))
     );
+    assert_eq!(
+        normalize_thinking_config(Some("xhigh")),
+        (Some("enabled".into()), Some(32_768))
+    );
 }
 
 #[test]

@@ -48,6 +48,8 @@
     "low": "Low",
     "medium": "Medium",
     "high": "High",
+    "xhigh": "XHigh",
+    "xhighShort": "XHigh",
     "offShort": "Off",
     "lowShort": "Low",
     "mediumShort": "Med",

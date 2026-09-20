@@ -8,6 +8,7 @@ import { ipcBridge } from '@/common';
 import { buildGuidSlashCommands } from '@/common/chat/slash/guidSlashCommands';
 import type { SlashCommandItem } from '@/common/chat/slash/types';
 import type { IMcpServer, TProviderWithModel } from '@/common/config/storage';
+import { resolveModelThoughtLevels } from '@/common/utils/modelCapabilities';
 import { resolveLocaleKey } from '@/common/utils';
 import type { AssistantDetail } from '@/common/types/agent/assistantTypes';
 
@@ -29,6 +30,7 @@ import { useGuidSend } from './hooks/useGuidSend';
 import { useTypewriterPlaceholder } from './hooks/useTypewriterPlaceholder';
 import { ensureBackendMcpCatalog } from '@/renderer/hooks/mcp/catalog';
 import { resolveGuidAssistantDefaults } from './utils/assistantDefaults';
+import type { AgentRuntimeDerivedOption } from '@/renderer/utils/model/agentRuntimeCatalog';
 import SpeechInputButton from '@/renderer/components/chat/SpeechInputButton';
 import { chatFileRefPath, uploadFileRef } from '@/common/types/chatFile';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
@@ -587,6 +589,40 @@ const GuidPage: React.FC = () => {
   const PROVIDER_BASED_AGENTS = new Set(['aionrs']);
   const isGeminiMode = PROVIDER_BASED_AGENTS.has(agentSelection.selectedAssistantBackend);
 
+  // Provider-backed AionRS models do not have an ACP runtime on the home page
+  // yet. Build the same thought-level option directly from the selected model
+  // settings so the selector is available before the first message creates a
+  // conversation runtime.
+  const providerThoughtLevelOption = useMemo<AgentRuntimeDerivedOption | null>(() => {
+    if (!isGeminiMode || !modelSelection.current_model?.use_model) return null;
+    const modelName = modelSelection.current_model.use_model;
+    const settings = modelSelection.current_model.model_settings?.[modelName];
+    const levels = resolveModelThoughtLevels(modelName, settings);
+    if (levels.length === 0) return null;
+    const selected = agentSelection.selectedThoughtLevelValue;
+    const defaultValue =
+      (selected && levels.includes(selected as (typeof levels)[number]) && selected) ||
+      (settings?.thought_level && levels.includes(settings.thought_level) ? settings.thought_level : levels[0]);
+    return {
+      id: 'thought_level',
+      category: 'thought_level',
+      currentValue: defaultValue,
+      options: levels.map((level) => ({
+        value: level,
+        label:
+          level === 'off'
+            ? t('agent.thoughtLevel.off', '关闭')
+            : level === 'low'
+              ? t('agent.thoughtLevel.low', '低')
+              : level === 'medium'
+              ? t('agent.thoughtLevel.medium', '中')
+                : level === 'xhigh'
+                  ? t('agent.thoughtLevel.xhigh', '极高')
+                  : t('agent.thoughtLevel.high', '高'),
+      })),
+    };
+  }, [agentSelection.selectedThoughtLevelValue, isGeminiMode, modelSelection.current_model, t]);
+
   // Build the mention dropdown node
   // Build the model selector node
   const modelSelectorNode = (
@@ -598,7 +634,7 @@ const GuidPage: React.FC = () => {
       currentAcpCachedModelInfo={agentSelection.currentAcpCachedModelInfo}
       selectedAcpModel={agentSelection.selectedAcpModel}
       setSelectedAcpModel={setGuidSelectedAcpModel}
-      thoughtLevelOption={isGeminiMode ? null : agentSelection.currentThoughtLevelOption}
+      thoughtLevelOption={isGeminiMode ? providerThoughtLevelOption : agentSelection.currentThoughtLevelOption}
       onThoughtLevelSelect={setGuidSelectedThoughtLevel}
     />
   );
@@ -625,7 +661,7 @@ const GuidPage: React.FC = () => {
       currentAcpCachedModelInfo={agentSelection.currentAcpCachedModelInfo}
       selectedAcpModel={agentSelection.selectedAcpModel}
       setSelectedAcpModel={setGuidSelectedAcpModel}
-      thoughtLevelOption={isGeminiMode ? null : agentSelection.currentThoughtLevelOption}
+      thoughtLevelOption={isGeminiMode ? providerThoughtLevelOption : agentSelection.currentThoughtLevelOption}
       onThoughtLevelSelect={setGuidSelectedThoughtLevel}
       modeBackend={agentSelection.selectedAssistantBackend}
       selectedMode={agentSelection.selectedMode}

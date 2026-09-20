@@ -8,6 +8,7 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IProvider } from '@/common/config/storage';
+import { toAionrsThoughtLevel } from '@/common/utils/modelCapabilities';
 
 const mocks = vi.hoisted(() => ({
   close: vi.fn(),
@@ -160,9 +161,10 @@ vi.mock('@arco-design/web-react', async (importOriginal) => {
     options?: Array<Option | string>;
     triggerProps?: { getPopupContainer?: (node: HTMLElement) => HTMLElement };
     value?: string | string[];
+    'data-testid'?: string;
   };
 
-  const MockSelect = ({ children, mode, onChange, options = [], triggerProps, value }: SelectProps) => {
+  const MockSelect = ({ children, mode, onChange, options = [], triggerProps, value, 'data-testid': dataTestId }: SelectProps) => {
     triggerProps?.getPopupContainer?.(document.createElement('span'));
     const optionValues = new Set([
       ...options.map((option) => (typeof option === 'string' ? option : option.value)),
@@ -184,7 +186,7 @@ vi.mock('@arco-design/web-react', async (importOriginal) => {
 
     return (
       <select
-        data-testid={testId}
+        data-testid={dataTestId ?? testId}
         multiple={mode === 'multiple'}
         value={mode === 'multiple' ? (Array.isArray(value) ? value : []) : typeof value === 'string' ? value : ''}
         onChange={(event) => {
@@ -302,6 +304,11 @@ describe('supportsOpenAiApiMode', () => {
 });
 
 describe('updateModelSettings', () => {
+  it('maps the UI disabled value to the strict aionrs protocol value', () => {
+    expect(toAionrsThoughtLevel('off')).toBe('disabled');
+    expect(toAionrsThoughtLevel('low')).toBe('low');
+    expect(toAionrsThoughtLevel('auto')).toBeUndefined();
+  });
   it('applies explicit settings to every selected model without changing other models', () => {
     const result = updateModelSettings(
       { existing: { image_input: 'unsupported' } },
@@ -374,7 +381,7 @@ describe('updateModelSettings', () => {
     const result = updateModelSettings(undefined, ['deepseek-reasoner'], 'auto', 'auto', 'auto', 'auto', []);
 
     expect(result).toEqual({
-      'deepseek-reasoner': { thought_level: 'auto', thought_levels: [] },
+      'deepseek-reasoner': { thought_levels: [] },
     });
   });
 
@@ -388,8 +395,24 @@ describe('updateModelSettings', () => {
 
     expect(result).toEqual({
       'deepseek-reasoner': {
-        thought_level: 'auto',
         thought_levels: ['off', 'low', 'medium', 'high'],
+      },
+    });
+  });
+
+  it('keeps every checked level when a concrete default is selected', () => {
+    expect(
+      updateModelSettings(undefined, ['qwen3'], 'auto', 'auto', 'auto', 'low', [
+        'off',
+        'low',
+        'medium',
+        'high',
+        'xhigh',
+      ])
+    ).toEqual({
+      qwen3: {
+        thought_level: 'low',
+        thought_levels: ['off', 'low', 'medium', 'high', 'xhigh'],
       },
     });
   });
@@ -534,7 +557,7 @@ describe('model capability selectors', () => {
       />
     );
 
-    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(4));
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(5));
     const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
     fireEvent.click(checkboxes[1]);
     fireEvent.click(checkboxes[2]);
@@ -546,19 +569,82 @@ describe('model capability selectors', () => {
     expect(mocks.onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         model_settings: {
-          'gpt-4o': { thought_level: 'auto', thought_levels: ['low', 'medium'] },
+          'gpt-4o': { thought_levels: ['low', 'medium'] },
         },
       })
     );
   });
 
-  it('reloads saved reasoning levels when reopening the editor', async () => {
-    const saved = provider({ model_settings: { 'gpt-4o': { thought_levels: ['low', 'medium'] } } });
-    mocks.listProviders.mockResolvedValue([saved]);
-
+  it('persists the full checked list when the default remains automatic', async () => {
     render(
       <AddModelModal
         data={provider()}
+        model='gpt-4o'
+        modalProps={{ visible: true }}
+        modalCtrl={{ close: mocks.close }}
+        onSubmit={mocks.onSubmit}
+      />
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(5));
+    const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    fireEvent.click(checkboxes[1]);
+    fireEvent.click(checkboxes[2]);
+    fireEvent.click(checkboxes[3]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.confirm' }));
+
+    expect(mocks.onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model_settings: {
+          'gpt-4o': { thought_levels: ['low', 'medium', 'high'] },
+        },
+      })
+    );
+  });
+
+
+  it('does not reset checked levels when provider data refreshes while open', async () => {
+    const initial = provider();
+    const { rerender } = render(
+      <AddModelModal
+        data={initial}
+        model='gpt-4o'
+        modalProps={{ visible: true }}
+        modalCtrl={{ close: mocks.close }}
+        onSubmit={mocks.onSubmit}
+      />
+    );
+
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(5));
+    const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    fireEvent.click(checkboxes[1]);
+    fireEvent.click(checkboxes[2]);
+
+    rerender(
+      <AddModelModal
+        data={{ ...initial, name: 'refreshed' }}
+        model='gpt-4o'
+        modalProps={{ visible: true }}
+        modalCtrl={{ close: mocks.close }}
+        onSubmit={mocks.onSubmit}
+      />
+    );
+
+    expect((screen.getAllByRole('checkbox') as HTMLInputElement[])[1]).toBeChecked();
+    expect((screen.getAllByRole('checkbox') as HTMLInputElement[])[2]).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'common.confirm' }));
+    expect(mocks.onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ model_settings: { 'gpt-4o': { thought_levels: ['low', 'medium'] } } })
+    );
+  });
+
+  it('reloads saved reasoning levels when reopening the editor', async () => {
+    const saved = provider({ model_settings: { 'gpt-4o': { thought_levels: ['low', 'medium'] } } });
+
+    render(
+      <AddModelModal
+        data={saved}
         model='gpt-4o'
         modalProps={{ visible: true }}
         modalCtrl={{ close: mocks.close }}

@@ -45,6 +45,8 @@ const ReasoningEffortSelector: React.FC<ReasoningEffortSelectorProps> = ({
           return t('agent.thoughtLevel.medium', '中强度 (Medium)');
         case 'high':
           return t('agent.thoughtLevel.high', '高强度 (High)');
+        case 'xhigh':
+          return t('agent.thoughtLevel.xhigh', '极高强度 (XHigh)');
         default:
           return lvl;
       }
@@ -62,6 +64,8 @@ const ReasoningEffortSelector: React.FC<ReasoningEffortSelectorProps> = ({
           return t('agent.thoughtLevel.mediumShort', '中');
         case 'high':
           return t('agent.thoughtLevel.highShort', '高');
+        case 'xhigh':
+          return t('agent.thoughtLevel.xhighShort', '极高');
         default:
           return lvl;
       }
@@ -79,9 +83,9 @@ const ReasoningEffortSelector: React.FC<ReasoningEffortSelectorProps> = ({
 
   const shortLabel = getLevelShortLabel(effectiveValue);
   const fullLabel = getLevelLabel(effectiveValue);
-  const displayLabel = compact
-    ? `${t('agent.thoughtLevel.label', '思考')}: ${shortLabel}`
-    : `${t('agent.thoughtLevel.label', '思考')}: ${fullLabel}`;
+  // Keep the send box compact and stable in Chinese; the dropdown retains the
+  // Full protocol labels remain available in the dropdown for disambiguation.
+  const displayLabel = `${t('agent.thoughtLevel.label', '思考')}: ${shortLabel}`;
 
   return (
     <Dropdown

@@ -66,12 +66,18 @@ export const getBaseModelName = (modelName: string): string => {
 export type ModelOpenAiApiModeChoice = ModelOpenAiApiMode | 'auto';
 export type ModelImageInputChoice = ModelImageInputCapability | 'auto';
 export type ModelContextLimitChoice = number | 'auto';
-export type ModelThoughtLevelChoice = 'auto' | 'off' | 'low' | 'medium' | 'high';
+export type ModelThoughtLevelChoice = 'auto' | 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+
+/** Map the UI's disabled value to the strict aionrs wire value. */
+export const toAionrsThoughtLevel = (level: string | undefined): string | undefined => {
+  if (!level || level === 'auto') return undefined;
+  return level === 'off' ? 'disabled' : level;
+};
 
 /** Auto-detect whether a model supports reasoning/thought level settings. */
 export const detectModelThoughtSupport = (modelName: string): boolean => {
   const normalized = getBaseModelName(modelName);
-  return /o1|o3|r1|reasoning|reasoner|thinking|think|deepseek|claude-3-7|qwq|gemini-2/i.test(normalized);
+  return /o1|o3|r1|reasoning|reasoner|thinking|think|deepseek|qwen3|qwen-3|qwq|claude-3-7|gemini-2/i.test(normalized);
 };
 
 /** Auto-detect default context window (in tokens) based on model name. */
@@ -124,11 +130,11 @@ export const updateModelSettings = (
     if (imageInput !== 'auto') settings.image_input = imageInput;
     if (openAiApiMode !== 'auto') settings.openai_api_mode = openAiApiMode;
     if (!isAutoLimit && typeof contextLimit === 'number') settings.context_limit = contextLimit;
-    // Keep the default separate from the supported-level list. In particular,
-    // an explicit `auto` default must survive saving a non-empty list; omitting
-    // it makes the AionCore factory choose its fallback level on the next
-    // conversation.
-    if (hasThoughtLevels && thoughtLevel !== undefined) {
+    // Keep the default separate from the supported-level list. `auto` is the
+    // absence of a fixed default, not a concrete level to persist. Persisting
+    // the literal string here caused older provider round-trips to treat the
+    // default as the only reasoning choice and drop/replace the checked list.
+    if (hasThoughtLevels && thoughtLevel !== undefined && thoughtLevel !== 'auto') {
       settings.thought_level = thoughtLevel;
     } else if (!isAutoThought && thoughtLevel && thoughtLevel !== 'auto') {
       settings.thought_level = thoughtLevel;

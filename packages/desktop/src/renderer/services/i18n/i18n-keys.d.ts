@@ -63,6 +63,8 @@ export type I18nKey =
   | 'agent.setup.notConfigured'
   | 'agent.setup.switching'
   | 'agent.thoughtLevel.high'
+  | 'agent.thoughtLevel.xhigh'
+  | 'agent.thoughtLevel.xhighShort'
   | 'agent.thoughtLevel.highShort'
   | 'agent.thoughtLevel.label'
   | 'agent.thoughtLevel.low'
