@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import { toAionrsThoughtLevel } from '@/common/utils/modelCapabilities';
 import { type ChatFileRef, chatFileRefPath } from '@/common/types/chatFile';
 import type { IMcpServer, TProviderWithModel } from '@/common/config/storage';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
@@ -164,7 +165,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     const assistantOverrides = {
       model: assistantOverrideModel,
       permission: selectedMode || undefined,
-      thought_level: selectedThoughtLevelValue || undefined,
+      thought_level: toAionrsThoughtLevel(selectedThoughtLevelValue),
       skill_ids: enabled_skills_to_send,
       disabled_builtin_skill_ids: excludeBuiltinSkills,
       mcp_ids: assistantOverrideMcpIds,

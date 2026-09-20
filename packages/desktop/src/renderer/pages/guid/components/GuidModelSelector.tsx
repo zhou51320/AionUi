@@ -157,20 +157,72 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
                   addModelItem,
                 ]
               : [
-                  <RuntimeSelectorModelList
-                    key='model-list'
-                    groups={providerModelGroups}
-                    currentModelId={currentProviderModelId}
-                    onSelect={(id) => {
-                      const entry = providerModelLookup.get(id);
-                      if (!entry) return;
-                      setCurrentModel({ ...entry.provider, use_model: entry.modelName } as TProviderWithModel).catch(
-                        (error) => {
-                          console.error('Failed to set current model:', error);
+                  normalizedThoughtLevelOption ? (
+                    <React.Fragment key='provider-runtime-options'>
+                      <Menu.SubMenu
+                        key='model'
+                        triggerProps={RUNTIME_SUBMENU_TRIGGER_PROPS}
+                        title={
+                          <RuntimeSelectorSubMenuTitle
+                            label={t('common.model', { defaultValue: 'Model' })}
+                            value={geminiButtonLabel}
+                          />
                         }
-                      );
-                    }}
-                  />,
+                      >
+                        <RuntimeSelectorModelList
+                          groups={providerModelGroups}
+                          currentModelId={currentProviderModelId}
+                          onSelect={(id) => {
+                            const entry = providerModelLookup.get(id);
+                            if (!entry) return;
+                            setCurrentModel({
+                              ...entry.provider,
+                              use_model: entry.modelName,
+                            } as TProviderWithModel).catch((error) =>
+                              console.error('Failed to set current model:', error)
+                            );
+                          }}
+                        />
+                      </Menu.SubMenu>
+                      <Menu.SubMenu
+                        key='thought-level'
+                        triggerProps={RUNTIME_SUBMENU_TRIGGER_PROPS}
+                        title={
+                          <RuntimeSelectorSubMenuTitle
+                            label={t('agent.thoughtLevel.label')}
+                            value={getCurrentThoughtLevelLabel(normalizedThoughtLevelOption)}
+                          />
+                        }
+                      >
+                        {normalizedThoughtLevelOption.options.map((item) => (
+                          <Menu.Item
+                            key={item.value}
+                            className={item.value === normalizedThoughtLevelOption.currentValue ? '!bg-2' : ''}
+                            onClick={() => onThoughtLevelSelect?.(item.value)}
+                          >
+                            <RuntimeSelectorCheckedItem
+                              selected={item.value === normalizedThoughtLevelOption.currentValue}
+                            >
+                              {item.label}
+                            </RuntimeSelectorCheckedItem>
+                          </Menu.Item>
+                        ))}
+                      </Menu.SubMenu>
+                    </React.Fragment>
+                  ) : (
+                    <RuntimeSelectorModelList
+                      key='model-list'
+                      groups={providerModelGroups}
+                      currentModelId={currentProviderModelId}
+                      onSelect={(id) => {
+                        const entry = providerModelLookup.get(id);
+                        if (!entry) return;
+                        setCurrentModel({ ...entry.provider, use_model: entry.modelName } as TProviderWithModel).catch(
+                          (error) => console.error('Failed to set current model:', error)
+                        );
+                      }}
+                    />
+                  ),
                   addModelItem,
                 ]}
           </Menu>
@@ -184,7 +236,7 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
         >
           <span className='flex items-center gap-6px min-w-0'>
             <Brain theme='outline' size='14' fill={iconColors.secondary} className='shrink-0' />
-            <span className='guid-model-label'>{geminiButtonLabel}</span>
+            <span className='guid-model-label'>{combinedAcpButtonLabel}</span>
             <Down theme='outline' size='12' fill={iconColors.secondary} className='shrink-0' />
           </span>
         </Button>
