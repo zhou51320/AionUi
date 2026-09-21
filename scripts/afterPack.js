@@ -9,6 +9,7 @@ const {
   getModulesToRebuild,
 } = require('./rebuildNativeModules');
 const { verifyBundledAioncoreResources } = require('../packages/shared-scripts/src/verify-bundled-aioncore-resources');
+const crypto = require('crypto');
 
 /**
  * afterPack hook for electron-builder
@@ -35,6 +36,34 @@ function verifyBundledResources(resourcesDir, electronPlatformName, targetArch) 
   }
 
   console.log(`   ✓ Bundled resources verified for ${result.runtimeKey} (${result.checked.length} checks)`);
+}
+
+function verifyBundledPdfRuntime(resourcesDir, electronPlatformName, targetArch) {
+  if (electronPlatformName !== 'win32' || targetArch !== 'x64') return;
+  const runtimeRoot = path.join(resourcesDir, 'pdf-runtime');
+  const manifestPath = path.join(runtimeRoot, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) throw new Error(`Packaged app is missing PDF runtime manifest: ${manifestPath}`);
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  if (manifest.platform !== 'win32-x64' || manifest.python?.version !== '3.8.10') {
+    throw new Error('Packaged PDF runtime manifest is not the expected Win7 win32-x64 Python 3.8.10 runtime');
+  }
+  const required = [
+    path.join(runtimeRoot, manifest.python.executable || 'python.exe'),
+    path.join(runtimeRoot, 'Lib', 'site-packages', 'pypdf'),
+    path.join(runtimeRoot, 'Lib', 'site-packages', 'reportlab'),
+    path.join(runtimeRoot, 'Lib', 'site-packages', 'PIL'),
+    path.join(runtimeRoot, 'Lib', 'site-packages', 'pdf2image'),
+    path.join(runtimeRoot, manifest.poppler.relativeBin, 'pdftoppm.exe'),
+  ];
+  const missing = required.filter((entry) => !fs.existsSync(entry));
+  if (missing.length > 0) throw new Error(`Packaged PDF runtime is incomplete: ${missing.join(', ')}`);
+  for (const [relative, expected] of Object.entries(manifest.files || {})) {
+    const filePath = path.join(runtimeRoot, relative);
+    if (!fs.existsSync(filePath)) throw new Error(`Packaged PDF runtime missing manifest file: ${relative}`);
+    const actual = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+    if (actual !== expected) throw new Error(`Packaged PDF runtime SHA-256 mismatch: ${relative}`);
+  }
+  console.log(`   ✓ PDF runtime verified (${manifest.python.version}, Poppler ${manifest.poppler.version})`);
 }
 
 module.exports = async function afterPack(context) {
@@ -73,6 +102,7 @@ module.exports = async function afterPack(context) {
     }
 
     verifyBundledResources(resourcesDir, electronPlatformName, targetArch);
+    verifyBundledPdfRuntime(resourcesDir, electronPlatformName, targetArch);
   } else {
     throw new Error(`resources directory not found: ${resourcesDir}`);
   }

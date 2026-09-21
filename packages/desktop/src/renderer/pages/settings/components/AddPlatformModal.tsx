@@ -30,6 +30,7 @@ import {
   type PlatformConfig,
 } from '@/renderer/utils/model/modelPlatforms';
 import { ProviderLogo } from '@/renderer/components/agent/ThemedLogo';
+import { MASKED_API_KEY } from '@/common/types/provider/providerApi';
 import type { DeepLinkAddProviderDetail } from '@/renderer/hooks/system/useDeepLink';
 
 /**
@@ -227,6 +228,7 @@ const AddPlatformModal = ModalHOC<{
   // Track last detection input to avoid redundant detection
   const [lastDetectionInput, setLastDetectionInput] = useState<{ base_url: string; api_key: string } | null>(null);
   const [serverConfig, setServerConfig] = useState<ServerAssignedConfig | null>(null);
+  const [serverApiKey, setServerApiKey] = useState('');
   const [fetchingServerConfig, setFetchingServerConfig] = useState<boolean>(false);
 
   const platformValue = Form.useWatch('platform', form);
@@ -246,6 +248,7 @@ const AddPlatformModal = ModalHOC<{
   const isBedrock = platform === 'bedrock';
   const isGemini = isGeminiPlatform(platform);
   const isNewApi = isNewApiPlatform(platform);
+  const effectiveApiKey = api_key === MASKED_API_KEY ? serverApiKey : api_key;
 
   // new-api 每模型协议选择状态 / new-api per-model protocol selection state
   const [modelProtocol, setModelProtocol] = useState<string>('openai');
@@ -272,7 +275,7 @@ const AddPlatformModal = ModalHOC<{
 
   // For Bedrock, don't pass bedrock_config to avoid auto-refresh on input changes
   // We'll build it dynamically in onFocus
-  const modelListState = useModeModeList(platform, actualBaseUrl, api_key, true, undefined);
+  const modelListState = useModeModeList(platform, actualBaseUrl, effectiveApiKey, true, undefined);
 
   // 协议检测 Hook / Protocol detection hook
   // 启用检测的条件：
@@ -286,10 +289,12 @@ const AddPlatformModal = ModalHOC<{
   // 只有在用户修改了输入值（相对于上次采纳建议时）才触发检测
   // Only trigger detection when input changed since last accepted suggestion
   const inputChangedSinceLastSwitch =
-    !lastDetectionInput || lastDetectionInput.base_url !== actualBaseUrl || lastDetectionInput.api_key !== api_key;
+    !lastDetectionInput ||
+    lastDetectionInput.base_url !== actualBaseUrl ||
+    lastDetectionInput.api_key !== effectiveApiKey;
   const protocolDetection = useProtocolDetection(
     shouldEnableDetection && inputChangedSinceLastSwitch ? actualBaseUrl : '',
-    shouldEnableDetection && inputChangedSinceLastSwitch ? api_key : '',
+    shouldEnableDetection && inputChangedSinceLastSwitch ? effectiveApiKey : '',
     {
       debounceMs: 1000,
       autoDetect: true,
@@ -311,7 +316,7 @@ const AddPlatformModal = ModalHOC<{
       protocolDetection.reset();
       // 记录当前输入，防止切换后重复检测
       // Record current input to prevent redundant detection after switch
-      setLastDetectionInput({ base_url: actualBaseUrl, api_key });
+      setLastDetectionInput({ base_url: actualBaseUrl, api_key: effectiveApiKey });
       message.success(t('settings.platformSwitched', { platform: targetPlatform.name }));
     }
   };
@@ -320,6 +325,7 @@ const AddPlatformModal = ModalHOC<{
   useEffect(() => {
     if (modalProps.visible) {
       form.resetFields();
+      setServerApiKey('');
       form.setFieldValue('bedrockAuthMethod', 'accessKey');
       form.setFieldValue('bedrockRegion', 'us-east-1');
       protocolDetection.reset();
@@ -349,9 +355,10 @@ const AddPlatformModal = ModalHOC<{
           .then((json) => {
             if (json?.code === 0 && json.data) {
               const data: ServerAssignedConfig = json.data;
-              setServerConfig(data);
+              setServerConfig({ ...data, api_key: undefined });
+              setServerApiKey(data.api_key || '');
               form.setFieldValue('base_url', data.base_url || '');
-              form.setFieldValue('api_key', data.api_key || '');
+              form.setFieldValue('api_key', data.api_key ? MASKED_API_KEY : '');
               const modelList =
                 Array.isArray(data.models) && data.models.length > 0
                   ? data.models
@@ -395,8 +402,8 @@ const AddPlatformModal = ModalHOC<{
       .then((values) => {
         const isServer = values.platform === 'server-assigned';
         const name = isServer
-          ? (serverConfig?.provider_name || serverConfig?.model_name || '自托管模型服务')
-          : (t('settings.platformCustom', { defaultValue: '自定义服务商' }));
+          ? serverConfig?.provider_name || serverConfig?.model_name || '自托管模型服务'
+          : t('settings.platformCustom', { defaultValue: '自定义服务商' });
 
         const provider: IProvider = {
           id: uuid(),
@@ -405,7 +412,7 @@ const AddPlatformModal = ModalHOC<{
           // 优先使用用户输入的 base_url，否则使用平台预设值
           // Prefer user input base_url, fallback to platform preset
           base_url: isBedrock ? '' : values.base_url || selectedPlatform?.base_url || '',
-          api_key: isBedrock ? '' : values.api_key,
+          api_key: isBedrock ? '' : values.api_key === MASKED_API_KEY ? serverApiKey : values.api_key,
           // The model Select is multi-select: values.model is a string[], but
           // keep the single-value fallback for safety.
           models: Array.isArray(values.model) ? values.model : [values.model],
@@ -483,7 +490,7 @@ const AddPlatformModal = ModalHOC<{
                 if (value === 'server-assigned') {
                   if (serverConfig) {
                     form.setFieldValue('base_url', serverConfig.base_url || '');
-                    form.setFieldValue('api_key', serverConfig.api_key || '');
+                    form.setFieldValue('api_key', serverApiKey ? MASKED_API_KEY : '');
                     const modelList =
                       Array.isArray(serverConfig.models) && serverConfig.models.length > 0
                         ? serverConfig.models
@@ -493,7 +500,8 @@ const AddPlatformModal = ModalHOC<{
                     form.setFieldValue('model', modelList);
                     if (serverConfig.model_protocol) setModelProtocol(serverConfig.model_protocol);
                     if (serverConfig.image_input) setImageInput(serverConfig.image_input as ModelImageInputChoice);
-                    if (serverConfig.openai_api_mode) setOpenAiApiMode(serverConfig.openai_api_mode as ModelOpenAiApiModeChoice);
+                    if (serverConfig.openai_api_mode)
+                      setOpenAiApiMode(serverConfig.openai_api_mode as ModelOpenAiApiModeChoice);
                   }
                 } else if (value === 'custom') {
                   form.setFieldValue('base_url', '');
@@ -599,8 +607,14 @@ const AddPlatformModal = ModalHOC<{
               </div>
             }
           >
-            <Input
+            <Input.Password
+              onFocus={() => {
+                if (form.getFieldValue('api_key') === MASKED_API_KEY) form.setFieldValue('api_key', '');
+              }}
               onBlur={() => {
+                if (isServerAssigned && !form.getFieldValue('api_key') && serverApiKey) {
+                  form.setFieldValue('api_key', MASKED_API_KEY);
+                }
                 void modelListState.mutate();
               }}
             />

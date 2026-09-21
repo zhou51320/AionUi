@@ -150,17 +150,21 @@ pub struct BedrockConfig {
 
 /// Provider response for `GET /api/providers` and single-provider endpoints.
 ///
-/// The `api_key` field is returned in plaintext (decrypted on read). Storage
-/// remains encrypted at rest. Pre-launch convention for the frontend
-/// local-store → backend migration; no masking applied.
+/// API keys are never returned in plaintext. `api_key` is a fixed placeholder
+/// when a credential is configured; callers that need the credential for an
+/// actual provider request must use the dedicated credentials path.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProviderResponse {
     pub id: String,
     pub platform: String,
     pub name: String,
     pub base_url: String,
-    /// Plaintext API key (decrypted from storage).
+    /// Masked API key placeholder (`***`) when configured, otherwise empty.
     pub api_key: String,
+    /// Whether the provider has at least one configured API key.
+    pub api_key_configured: bool,
+    /// Number of newline/comma-separated keys stored for this provider.
+    pub api_key_count: usize,
     pub models: Vec<String>,
     pub enabled: bool,
     pub capabilities: Vec<ModelCapability>,
@@ -180,6 +184,14 @@ pub struct ProviderResponse {
     pub is_full_url: bool,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+/// Sensitive provider credentials returned only by the explicit credentials
+/// endpoint used by runtime integrations. Never include this shape in list or
+/// CRUD responses.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProviderCredentialsResponse {
+    pub api_key: String,
 }
 
 /// Request body for `POST /api/providers`.
@@ -497,7 +509,9 @@ mod tests {
             platform: "anthropic".into(),
             name: "Anthropic".into(),
             base_url: "https://api.anthropic.com".into(),
-            api_key: "sk-ant-api03-plaintext".into(),
+            api_key: "***".into(),
+            api_key_configured: true,
+            api_key_count: 1,
             models: vec!["claude-sonnet-4-20250514".into()],
             enabled: true,
             capabilities: vec![ModelCapability {
@@ -517,7 +531,7 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["id"], "uuid-xxx");
         assert_eq!(json["platform"], "anthropic");
-        assert_eq!(json["api_key"], "sk-ant-api03-plaintext");
+        assert_eq!(json["api_key"], "***");
         assert_eq!(json["base_url"], "https://api.anthropic.com");
         assert_eq!(json["models"][0], "claude-sonnet-4-20250514");
         assert_eq!(json["model_enabled"]["claude-sonnet-4-20250514"], true);
@@ -527,14 +541,15 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_response_api_key_plaintext() {
-        // Pre-launch: no masking is applied to the api_key field on the wire.
+    fn test_provider_response_api_key_is_masked() {
         let resp = ProviderResponse {
             id: "id".into(),
             platform: "openai".into(),
             name: "n".into(),
             base_url: "https://api.openai.com".into(),
-            api_key: "sk-secret-xyz".into(),
+            api_key: "***".into(),
+            api_key_configured: true,
+            api_key_count: 1,
             models: vec![],
             enabled: true,
             capabilities: vec![],
@@ -549,8 +564,8 @@ mod tests {
             updated_at: 0,
         };
         let json = serde_json::to_value(&resp).unwrap();
-        assert_eq!(json["api_key"], "sk-secret-xyz");
-        assert!(!json["api_key"].as_str().unwrap().contains("***"));
+        assert_eq!(json["api_key"], "***");
+        assert_eq!(json["api_key_configured"], true);
     }
 
     // -- CreateProviderRequest --

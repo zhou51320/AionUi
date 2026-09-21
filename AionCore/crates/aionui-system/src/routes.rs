@@ -9,9 +9,9 @@ use axum::routing::{delete, get, post};
 use aionui_api_types::{
     ApiResponse, ClientPreferencesResponse, CreateProviderRequest, CurrentUserResponse, DetectProtocolRequest,
     EnsureNodeRuntimeRequest, EnsureNodeRuntimeResponse, FeedbackDiagnosticsQuery, FeedbackDiagnosticsResponse,
-    FetchModelsAnonymousRequest, FetchModelsRequest, FetchModelsResponse, ProtocolDetectionResponse, ProviderResponse,
-    SystemInfoResponse, SystemSettingsResponse, UpdateCheckRequest, UpdateCheckResult, UpdateClientPreferencesRequest,
-    UpdateProviderRequest, UpdateSettingsRequest,
+    FetchModelsAnonymousRequest, FetchModelsRequest, FetchModelsResponse, ProtocolDetectionResponse,
+    ProviderCredentialsResponse, ProviderResponse, SystemInfoResponse, SystemSettingsResponse, UpdateCheckRequest,
+    UpdateCheckResult, UpdateClientPreferencesRequest, UpdateProviderRequest, UpdateSettingsRequest,
 };
 use aionui_auth::CurrentUser;
 use aionui_common::ApiError;
@@ -87,8 +87,9 @@ pub fn system_routes(state: SystemRouterState) -> Router {
         // "fetch-models" as a provider id.
         .route("/api/providers/detect-protocol", post(detect_protocol))
         .route("/api/providers/fetch-models", post(fetch_models_anonymous))
-        .route("/api/providers/{id}", delete(delete_provider).put(update_provider))
+        .route("/api/providers/{id}/credentials", get(get_provider_credentials))
         .route("/api/providers/{id}/models", post(fetch_models))
+        .route("/api/providers/{id}", delete(delete_provider).put(update_provider))
         .route("/api/system/current-user", get(get_current_user))
         .route("/api/system/info", get(get_system_info))
         .route("/api/system/check-update", post(check_update))
@@ -242,6 +243,19 @@ async fn delete_provider(
         .await
         .map_err(ApiError::from)?;
     Ok(Json(ApiResponse::success()))
+}
+
+async fn get_provider_credentials(
+    State(state): State<SystemRouterState>,
+    Extension(user): Extension<CurrentUser>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<ProviderCredentialsResponse>>, ApiError> {
+    let credentials = state
+        .provider_service
+        .credentials(&user.id, &id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(ApiResponse::ok(credentials)))
 }
 
 async fn fetch_models(

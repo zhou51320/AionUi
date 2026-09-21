@@ -400,6 +400,10 @@ jobs:
           if ($BuildFailed) {
             "result=failure" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           } else {
+            if ("${{ matrix.arch }}" -eq "x64" -and -not (Test-Path "resources/pdf-runtime/manifest.json")) {
+              Write-Error "PDF runtime manifest is missing; refusing to publish an incomplete offline Windows x64 package."
+              exit 1
+            }
             "result=success" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           }
         env:
@@ -632,6 +636,25 @@ jobs:
           fi
           echo "✅ asar isolation verified: no packages/web-cli entries"
 
+      - name: Create Windows portable ZIP with offline PDF runtime
+        if: >-
+          startsWith(matrix.platform, 'windows') &&
+          matrix.arch == 'x64' &&
+          success() && steps.windows-build.outputs.result == 'success'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path "out/win-unpacked/AionUi.exe")) {
+            throw "out/win-unpacked/AionUi.exe is missing; cannot create portable ZIP"
+          }
+          if (-not (Test-Path "out/win-unpacked/resources/pdf-runtime/manifest.json")) {
+            throw "Portable package is missing resources/pdf-runtime/manifest.json"
+          }
+          $zip = "out/AionUi-${{ matrix.platform }}-portable.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "out/win-unpacked/*" -DestinationPath $zip -CompressionLevel Optimal
+          Write-Host "Portable ZIP created: $zip"
+
       # Upload artifacts when:
       # - Build succeeded (all platforms)
       # - macOS: notarization timeout but artifacts exist (handled in build step)
@@ -647,7 +670,8 @@ jobs:
         shell: bash
         run: |
           echo "Removing non-installer files from out/ ..."
-          rm -f out/*.blockmap out/*.zip out/*.yml out/builder-debug.yml 2>/dev/null || true
+          rm -f out/*.blockmap out/*.yml out/builder-debug.yml 2>/dev/null || true
+          find out -maxdepth 1 -type f -name '*.zip' ! -name '*portable.zip' -delete 2>/dev/null || true
           echo "Remaining artifacts:"
           ls -lh out/ || true
 
@@ -663,6 +687,7 @@ jobs:
             out/*.msi
             out/*.dmg
             out/*.deb
+            out/*portable.zip
             out/AionUi-*-mac-*.zip
             out/*.yml
           if-no-files-found: warn

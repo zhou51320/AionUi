@@ -119,6 +119,10 @@ win:
   icon: resources/app.ico # Use the checked-in Windows icon resource for executable metadata/icon patching
   artifactName: ${productName}-${version}-${os}-${arch}.${ext}
   extraResources:
+    # Offline PDF skill runtime (Python 3.8.10, wheels and Poppler).
+    # scripts/prepare-pdf-runtime.js materializes this directory in CI/local builds.
+    - from: resources/pdf-runtime
+      to: pdf-runtime
     - from: resources/officecli.exe
       to: officecli.exe
     - from: resources/officecli.runtimeconfig.json

@@ -36,7 +36,14 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     const initializedKeyRef = useRef<string | null>(null);
     const isNewApi = isNewApiPlatform(data?.platform ?? '');
     const isEditing = Boolean(editingModel);
-    const { data: modelList, isLoading } = useModeModeList(data?.platform, data?.base_url, data?.api_key);
+    const { data: modelList, isLoading } = useModeModeList(
+      data?.platform,
+      data?.base_url,
+      data?.api_key,
+      true,
+      undefined,
+      data?.id
+    );
     const showOpenAiApiMode = supportsOpenAiApiMode(data?.platform ?? '', modelProtocol);
 
     const activeModelName = editingModel || (models.length > 0 ? models[models.length - 1] : '');

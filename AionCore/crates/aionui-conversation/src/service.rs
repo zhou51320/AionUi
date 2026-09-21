@@ -340,6 +340,7 @@ pub struct ConversationService {
     runtime_state: Arc<ConversationRuntimeStateService>,
     runtime_helper_bin: Option<String>,
     runtime_base_url: Option<String>,
+    runtime_environment: Vec<(String, String)>,
     runtime_token_service: Option<Arc<RuntimeTokenService>>,
 
     /// One background-stream watcher per LIVE Session instance (keyed by
@@ -424,6 +425,7 @@ impl ConversationService {
             runtime_state: Arc::new(ConversationRuntimeStateService::default()),
             runtime_helper_bin: None,
             runtime_base_url: None,
+            runtime_environment: Vec::new(),
             runtime_token_service: None,
             background_watchers: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
 
@@ -441,6 +443,13 @@ impl ConversationService {
     pub fn with_runtime_helper_context(mut self, helper_bin: String, base_url: String) -> Self {
         self.runtime_helper_bin = Some(helper_bin);
         self.runtime_base_url = Some(base_url);
+        self
+    }
+
+    /// Add environment values that must be visible to every skill/script
+    /// subprocess (for example the packaged Win7 PDF runtime).
+    pub fn with_runtime_environment(mut self, environment: Vec<(String, String)>) -> Self {
+        self.runtime_environment = environment;
         self
     }
 
@@ -4864,6 +4873,10 @@ impl ConversationService {
             self.runtime_base_url.as_deref(),
             runtime_token.as_deref(),
         );
+        for (key, value) in &self.runtime_environment {
+            build_opts.context.runtime_env.retain(|(existing, _)| existing != key);
+            build_opts.context.runtime_env.push((key.clone(), value.clone()));
+        }
     }
 
     fn runtime_token_for_build(

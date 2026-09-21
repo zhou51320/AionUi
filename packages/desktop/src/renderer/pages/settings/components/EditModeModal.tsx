@@ -8,6 +8,7 @@ import { ipcBridge } from '@/common';
 import useModeModeList from '@renderer/hooks/agent/useModeModeList';
 import { getProviderLogo } from '@/renderer/utils/model/modelPlatforms';
 import { ProviderLogo } from '@/renderer/components/agent/ThemedLogo';
+import { MASKED_API_KEY } from '@/common/types/provider/providerApi';
 
 const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): void }>(
   ({ modalProps, modalCtrl, ...props }) => {
@@ -28,6 +29,7 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
     const watchedApiKey = Form.useWatch('api_key', form);
     const effectiveBaseUrl = watchedBaseUrl ?? data?.base_url;
     const effectiveApiKey = watchedApiKey ?? data?.api_key;
+    const storedProviderIdForModels = !effectiveApiKey || effectiveApiKey === MASKED_API_KEY ? data?.id : undefined;
 
     // 获取供应商 Logo / Get provider logo
     const providerLogo = useMemo(() => {
@@ -49,7 +51,8 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
       isFullUrl ? '' : effectiveBaseUrl,
       isFullUrl ? '' : effectiveApiKey,
       true,
-      undefined
+      undefined,
+      storedProviderIdForModels
     );
 
     // Re-fetch the model list after the user edits the Base URL. This is
@@ -65,7 +68,15 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
       if (isFullUrl || isBedrock) return;
 
       const nextBaseUrl = form.getFieldValue('base_url') as string | undefined;
-      const apiKey = (form.getFieldValue('api_key') as string | undefined) ?? '';
+      let apiKey = (form.getFieldValue('api_key') as string | undefined) ?? '';
+      if (apiKey === MASKED_API_KEY && data?.id) {
+        try {
+          apiKey = (await ipcBridge.mode.getProviderCredentials.invoke({ id: data.id })).api_key;
+        } catch {
+          setModelsMissingAfterRefresh([]);
+          return;
+        }
+      }
       // Backend requires an api_key for non-bedrock platforms; without one a
       // fetch would just return empty — skip and clear any stale hint.
       if (!apiKey) {
@@ -114,6 +125,7 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
       if (data) {
         form.setFieldsValue({
           ...data,
+          api_key: data.api_key ? MASKED_API_KEY : '',
           model:
             data.models && data.models.length > 0
               ? data.models.length === 1
@@ -145,6 +157,12 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
               // Ensure models is always an array
               models: Array.isArray(values.model) ? values.model : [values.model],
             };
+
+            // A masked placeholder means "leave the stored credential alone".
+            // The backend treats an empty update value as no credential change.
+            if (updatedProvider.api_key === MASKED_API_KEY) {
+              updatedProvider.api_key = '';
+            }
 
             // Add Bedrock configuration if platform is Bedrock
             if (isBedrock) {
@@ -222,7 +240,15 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
               field={'api_key'}
               extra={<div className='text-11px text-t-secondary mt-2'>💡 {t('settings.multiApiKeyEditTip')}</div>}
             >
-              <Input.TextArea rows={4} placeholder={t('settings.apiKeyPlaceholder')} />
+              <Input.Password
+                placeholder={t('settings.apiKeyPlaceholder')}
+                onFocus={() => {
+                  if (form.getFieldValue('api_key') === MASKED_API_KEY) form.setFieldValue('api_key', '');
+                }}
+                onBlur={() => {
+                  if (!form.getFieldValue('api_key') && data?.api_key) form.setFieldValue('api_key', MASKED_API_KEY);
+                }}
+              />
             </Form.Item>
 
             {/* AWS Bedrock Authentication Method */}

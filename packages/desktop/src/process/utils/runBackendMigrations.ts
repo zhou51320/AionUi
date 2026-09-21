@@ -11,6 +11,7 @@ import { mcpService } from '@/common/adapter/ipcBridge';
 import type { ImageGenerationModelSetting } from '@/common/config/clientSettings';
 import { BUILTIN_BROWSER_MCP_NAME } from '@/common/config/constants';
 import {
+  IMAGE_GEN_ENV_KEYS,
   removeImageGenerationEnvKeys,
   resolveImageGenerationMcpEnv,
   type ImageGenerationMcpEnvResolveResult,
@@ -296,6 +297,17 @@ async function ensureBootstrapMcpServersInDb(configFile: ConfigFile): Promise<vo
   const existingImageEnv =
     existingImageServer?.transport.type === 'stdio' ? existingImageServer.transport.env : undefined;
   const imageEnvResolution = resolveImageGenerationMcpEnv(imageConfig, providers, existingImageEnv);
+  if (imageEnvResolution.ok === true && imageEnvResolution.provider.api_key === '***') {
+    try {
+      const credentials = await httpRequest<{ api_key: string }>(
+        'GET',
+        `/api/providers/${encodeURIComponent(imageEnvResolution.provider.id)}/credentials`
+      );
+      imageEnvResolution.env[IMAGE_GEN_ENV_KEYS.apiKey] = credentials.api_key;
+    } catch (error) {
+      console.warn('[Migration] image MCP credential resolution failed', error);
+    }
+  }
   logImageGenerationEnvResolution(imageEnvResolution, 'bootstrap');
   const imageServer = buildBuiltinImageGenerationServer(imageEnvResolution, imageConfig);
   const defaultServers = buildDefaultMcpServers();

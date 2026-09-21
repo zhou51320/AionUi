@@ -45,8 +45,10 @@ import type {
   CreateProviderRequest,
   FetchModelsAnonymousRequest,
   FetchModelsResponse,
+  ProviderCredentialsResponse,
   ProviderHealthCheckRequest,
   ProviderHealthCheckResponse,
+  ProviderListItem,
   UpdateProviderRequest,
 } from '../types/provider/providerApi';
 import type {
@@ -1091,7 +1093,7 @@ export const bedrock = {
 // ---------------------------------------------------------------------------
 
 export const mode = {
-  listProviders: httpGet<IProvider[], void>('/api/providers'),
+  listProviders: httpGet<ProviderListItem[], void>('/api/providers'),
   createProvider: httpPost<IProvider, CreateProviderRequest>('/api/providers'),
   updateProvider: httpPut<IProvider, { id: string } & UpdateProviderRequest>(
     (p) => `/api/providers/${p.id}`,
@@ -1101,6 +1103,9 @@ export const mode = {
     }
   ),
   deleteProvider: httpDelete<void, { id: string }>((p) => `/api/providers/${p.id}`),
+  getProviderCredentials: httpGet<ProviderCredentialsResponse, { id: string }>(
+    (p) => `/api/providers/${p.id}/credentials`
+  ),
   fetchProviderModels: httpPost<FetchModelsResponse, { id: string; try_fix?: boolean }>(
     (p) => `/api/providers/${p.id}/models`,
     (p) => ({ try_fix: p.try_fix })
@@ -2538,7 +2543,5 @@ export const market = {
   installResource: bridge.buildProvider<InstallMarketResourceResult, InstallMarketResourceParams>(
     'market.installResource'
   ),
-  exportResource: bridge.buildProvider<ExportMarketResourceResult, ExportMarketResourceParams>(
-    'market.exportResource'
-  ),
+  exportResource: bridge.buildProvider<ExportMarketResourceResult, ExportMarketResourceParams>('market.exportResource'),
 };

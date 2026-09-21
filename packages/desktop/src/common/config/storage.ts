@@ -531,6 +531,9 @@ export interface IProvider {
   name: string;
   base_url: string;
   api_key: string;
+  /** Backend returns a masked placeholder instead of plaintext credentials. */
+  api_key_configured?: boolean;
+  api_key_count?: number;
   models: string[];
   /**
    * 模型能力标签列表。打了标签就是支持，没打就是不支持

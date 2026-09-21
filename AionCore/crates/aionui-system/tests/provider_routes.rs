@@ -162,7 +162,7 @@ async fn list_providers_empty() {
 }
 
 #[tokio::test]
-async fn list_providers_returns_plaintext_api_key() {
+async fn list_providers_returns_masked_api_key() {
     let (_app, db) = setup().await;
     create_one(&db).await;
 
@@ -175,9 +175,9 @@ async fn list_providers_returns_plaintext_api_key() {
     assert_eq!(providers.len(), 1);
 
     let api_key = providers[0]["api_key"].as_str().unwrap();
-    // Pre-launch: api_key is returned plaintext on the wire (encrypted at rest).
-    assert_eq!(api_key, "sk-ant-api03-test1234");
-    assert!(!api_key.contains("***"));
+    assert_eq!(api_key, "***");
+    assert_eq!(providers[0]["api_key_configured"], true);
+    assert_eq!(providers[0]["api_key_count"], 1);
 }
 
 // ===========================================================================
@@ -201,7 +201,7 @@ async fn create_provider_success() {
     assert_eq!(data["platform"], "anthropic");
     assert_eq!(data["name"], "Anthropic");
     assert_eq!(data["base_url"], "https://api.anthropic.com");
-    assert_eq!(data["api_key"], "sk-ant-api03-test1234");
+    assert_eq!(data["api_key"], "***");
     assert!(data["enabled"].as_bool().unwrap());
     assert!(data["models"].as_array().unwrap().is_empty());
     assert!(data["created_at"].as_i64().unwrap() > 0);
@@ -225,7 +225,7 @@ async fn create_provider_with_supplied_id() {
     let json = body_json(resp).await;
     let data = &json["data"];
     assert_eq!(data["id"], "caller-id-123");
-    assert_eq!(data["api_key"], "sk-test");
+    assert_eq!(data["api_key"], "***");
     assert_eq!(data["model_enabled"]["gpt-4"], true);
     assert_eq!(data["model_enabled"]["gpt-3.5"], false);
 }
@@ -470,7 +470,7 @@ async fn update_provider_name() {
 }
 
 #[tokio::test]
-async fn update_provider_api_key_returns_plaintext() {
+async fn update_provider_api_key_returns_masked_value() {
     let (_app, db) = setup().await;
     let (_, id) = create_one(&db).await;
 
@@ -487,7 +487,23 @@ async fn update_provider_api_key_returns_plaintext() {
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await;
     let api_key = json["data"]["api_key"].as_str().unwrap();
-    assert_eq!(api_key, "new-key-abcdefgh");
+    assert_eq!(api_key, "***");
+}
+
+#[tokio::test]
+async fn provider_credentials_route_returns_secret_only_explicitly() {
+    let (_app, db) = setup().await;
+    let (_, id) = create_one(&db).await;
+
+    let app2 = system_routes(build_state(&db));
+    let resp = app2
+        .oneshot(get_request(&format!("/api/providers/{id}/credentials")))
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let json = body_json(resp).await;
+    assert_eq!(json["data"]["api_key"], "sk-ant-api03-test1234");
 }
 
 #[tokio::test]

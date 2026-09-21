@@ -15,6 +15,7 @@ import * as path from 'path';
 import { jsonrepair } from 'jsonrepair';
 import type OpenAI from 'openai';
 import { ClientFactory, type RotatingClient } from '@/common/api/ClientFactory';
+import * as ipcBridge from '@/common/adapter/ipcBridge';
 import type { TProviderWithModel } from '@/common/config/storage';
 import type { UnifiedChatCompletionResponse } from '@/common/api/RotatingApiClient';
 import { IMAGE_EXTENSIONS, MIME_TYPE_MAP, MIME_TO_EXT_MAP, DEFAULT_IMAGE_EXTENSION } from '@/common/config/constants';
@@ -297,13 +298,18 @@ export async function executeImageGeneration(
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [{ role: 'user', content: contentParts }];
 
     // Create client and call API
-    const rotatingClient: RotatingClient = await ClientFactory.createRotatingClient(provider, {
+    let runtimeProvider = provider;
+    if ((!provider.api_key || provider.api_key === '***') && provider.id) {
+      const credentials = await ipcBridge.mode.getProviderCredentials.invoke({ id: provider.id });
+      runtimeProvider = { ...provider, api_key: credentials.api_key };
+    }
+    const rotatingClient: RotatingClient = await ClientFactory.createRotatingClient(runtimeProvider, {
       proxy,
       rotatingOptions: { maxRetries: 3, retryDelay: 1000 },
     });
 
     const completion: UnifiedChatCompletionResponse = await rotatingClient.createChatCompletion(
-      { model: provider.use_model, messages: messages as any },
+      { model: runtimeProvider.use_model, messages: messages as any },
       { signal, timeout: API_TIMEOUT_MS }
     );
 

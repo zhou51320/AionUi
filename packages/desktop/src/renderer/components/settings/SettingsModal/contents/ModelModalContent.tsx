@@ -69,7 +69,8 @@ const getNextProtocol = (current: string): string => {
 };
 
 // Calculate API Key count
-const getApiKeyCount = (api_key: string): number => {
+const getApiKeyCount = (api_key: string, configuredCount?: number): number => {
+  if (typeof configuredCount === 'number') return configuredCount;
   if (!api_key) return 0;
   return api_key.split(/[,\n]/).filter((k) => k.trim().length > 0).length;
 };
@@ -471,11 +472,12 @@ const ModelModalContent: React.FC = () => {
                               className='cursor-pointer hover:text-t-primary transition-colors'
                               onClick={() => editModalCtrl.open({ data: platform })}
                             >
-                              {t('settings.apiKeyCount')}（{getApiKeyCount(platform.api_key)}）
+                              {t('settings.apiKeyCount')}（{getApiKeyCount(platform.api_key, platform.api_key_count)}）
                             </span>
                           </span>
                           <span className='text-12px text-t-secondary whitespace-nowrap md:hidden'>
-                            {(platform.models ?? []).length} / {getApiKeyCount(platform.api_key)}
+                            {(platform.models ?? []).length} /{' '}
+                            {getApiKeyCount(platform.api_key, platform.api_key_count)}
                           </span>
                           {/* 供应商启用开关 / Provider enable switch */}
                           <Switch

@@ -41,26 +41,32 @@ const useModeModeList = (
     access_key_id?: string;
     secret_access_key?: string;
     profile?: string;
-  }
+  },
+  provider_id?: string
 ) => {
   return useSWR(
-    [platform + '/models', { platform, base_url, api_key, try_fix, bedrock_config }],
-    async ([_url, { platform, base_url, api_key, try_fix, bedrock_config }]): Promise<{
+    [
+      provider_id ? `${provider_id}/models` : platform + '/models',
+      { platform, base_url, api_key, try_fix, bedrock_config, provider_id },
+    ],
+    async ([_url, { platform, base_url, api_key, try_fix, bedrock_config, provider_id }]): Promise<{
       models: { label: string; value: string }[];
       fix_base_url?: string;
     }> => {
       // Only call the backend when we have credentials it can actually use:
       // - bedrock: bedrock_config carries the credentials (api_key not required)
       // - everything else: api_key is mandatory per backend validator
-      const hasUsableCredentials = platform === 'bedrock' ? !!bedrock_config : !!api_key;
+      const hasUsableCredentials = Boolean(provider_id) || (platform === 'bedrock' ? !!bedrock_config : !!api_key);
       if (hasUsableCredentials) {
-        const res = await ipcBridge.mode.fetchModelList.invoke({
-          base_url,
-          api_key: api_key ?? '',
-          try_fix,
-          platform,
-          bedrock_config,
-        });
+        const res = provider_id
+          ? await ipcBridge.mode.fetchProviderModels.invoke({ id: provider_id, try_fix })
+          : await ipcBridge.mode.fetchModelList.invoke({
+              base_url,
+              api_key: api_key ?? '',
+              try_fix,
+              platform,
+              bedrock_config,
+            });
         let modelList = res.models.map((v) => {
           // Handle both string and object formats (Bedrock returns objects with id and name)
           if (typeof v === 'string') {

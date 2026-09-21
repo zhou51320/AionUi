@@ -72,7 +72,7 @@ For "something is wrong with AionUi" with no specifics, run `overview` first —
 
 ### 4. Secret safety (hard rule)
 
-Provider listings include every `api_key` in plaintext. **Never** paste raw provider JSON into chat, a log, or a memory file. When you must show a provider, redact the key (`sk-…last4`). Treat keys the user gives you the same way.
+Provider listings expose only a masked `api_key` placeholder. **Never** request or paste raw provider credentials into chat, a log, or a memory file. Runtime credential resolution is handled by the backend.
 
 ### 5. An assistant has two parts
 

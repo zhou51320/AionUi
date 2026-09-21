@@ -14,6 +14,14 @@
 
 import type { IProvider, ModelCapability } from '@/common/config/storage';
 
+export const MASKED_API_KEY = '***';
+
+export type ProviderListItem = IProvider & {
+  /** Masked placeholder from the backend (`***`) when configured. */
+  api_key_configured?: boolean;
+  api_key_count?: number;
+};
+
 export interface CreateProviderRequest {
   /**
    * Optional caller-supplied id. When omitted, the server generates one.
@@ -110,4 +118,8 @@ export interface ProviderHealthCheckResponse {
   error_kind?: ProviderHealthCheckErrorKind;
   http_status?: number;
   timeout_stage?: string;
+}
+
+export interface ProviderCredentialsResponse {
+  api_key: string;
 }

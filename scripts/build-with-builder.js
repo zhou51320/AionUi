@@ -816,6 +816,17 @@ try {
     version: resolveAioncoreVersion(projectRoot),
   });
 
+  // Windows packages carry a self-contained Python 3.8.10 + PDF dependency
+  // runtime so the builtin PDF skill works fully offline on Win7.
+  if (targetPlatform === 'win32' && targetArch === 'x64') {
+    console.log('📄 Preparing offline PDF runtime (Python 3.8.10 + Poppler)...');
+    execSync(`node "${path.join(__dirname, 'prepare-pdf-runtime.js')}" --platform win32 --arch x64`, {
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+      env: process.env,
+    });
+  }
+
   // 6. Prepare hub resources (index.json + extension zips for offline fallback)
   execSync('node scripts/prepareHubResources.js', { stdio: 'inherit', env: process.env });
 

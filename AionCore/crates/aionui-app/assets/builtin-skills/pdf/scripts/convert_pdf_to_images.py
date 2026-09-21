@@ -6,8 +6,8 @@ Usage: python convert_pdf_to_images.py <input.pdf> <output_directory>
 
 Creates one PNG image per page: page_1.png, page_2.png, etc.
 
-Dependencies: pip install pdf2image
-Also requires: poppler-utils (brew install poppler on macOS)
+Dependencies are provided by AionUI's offline runtime on Win7. When running
+outside AionUI, install pdf2image and Poppler separately.
 """
 
 import os
@@ -28,8 +28,22 @@ def convert_pdf_to_images(pdf_path: str, output_dir: str, dpi: int = 150) -> Non
 
     print(f"Converting {pdf_path} to images...")
 
-    # Convert PDF to images
-    images = convert_from_path(pdf_path, dpi=dpi)
+    # Prefer the Poppler shipped with AionUI. This keeps Win7 portable builds
+    # independent of PATH and avoids an accidental online package install.
+    poppler_path = os.environ.get("AIONUI_PDF_POPPLER")
+    convert_kwargs = {"dpi": dpi}
+    if poppler_path:
+        convert_kwargs["poppler_path"] = poppler_path
+
+    try:
+        images = convert_from_path(pdf_path, **convert_kwargs)
+    except Exception as exc:
+        print(
+            "Error: Poppler is unavailable. In the AionUI offline package, "
+            "check AIONUI_PDF_POPPLER and the bundled PDF runtime. "
+            f"Details: {exc}"
+        )
+        sys.exit(1)
 
     for i, image in enumerate(images, start=1):
         output_path = os.path.join(output_dir, f"page_{i}.png")

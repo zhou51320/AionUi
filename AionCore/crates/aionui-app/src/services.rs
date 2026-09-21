@@ -85,6 +85,7 @@ pub struct AppServices {
     backend_binary_path: Arc<PathBuf>,
     runtime_helper_bin: String,
     runtime_base_url: String,
+    runtime_environment: Vec<(String, String)>,
     /// Shared with the Antigravity hook endpoint so it can authenticate callbacks.
     pub(crate) antigravity_hook_tokens: Arc<aionui_ai_agent::antigravity_hook::HookTokenRegistry>,
 }
@@ -109,6 +110,44 @@ fn must_refuse_startup_on_unreadable_system_user(
     is_new && !system_user_present && existing_row_present
 }
 
+fn resolve_pdf_runtime_environment(app_resource_dir: &std::path::Path) -> Vec<(String, String)> {
+    let candidates = [
+        std::env::var_os("AIONUI_PDF_RUNTIME").map(PathBuf::from),
+        Some(app_resource_dir.join("pdf-runtime").join("win32-x64")),
+        app_resource_dir
+            .parent()
+            .map(|parent| parent.join("pdf-runtime").join("win32-x64")),
+        std::env::current_dir()
+            .ok()
+            .map(|cwd| cwd.join("resources/pdf-runtime/win32-x64")),
+    ];
+    let Some(runtime_root) = candidates
+        .into_iter()
+        .flatten()
+        .find(|path| path.join("python.exe").exists())
+    else {
+        return Vec::new();
+    };
+    let poppler_root = std::env::var_os("AIONUI_PDF_POPPLER")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| runtime_root.join("poppler"));
+    vec![
+        (
+            "AIONUI_PYTHON".to_owned(),
+            runtime_root.join("python.exe").to_string_lossy().into_owned(),
+        ),
+        (
+            "AIONUI_PDF_RUNTIME".to_owned(),
+            runtime_root.to_string_lossy().into_owned(),
+        ),
+        (
+            "AIONUI_PDF_POPPLER".to_owned(),
+            poppler_root.to_string_lossy().into_owned(),
+        ),
+        ("AIONUI_PYTHON_VERSION".to_owned(), "3.8.10".to_owned()),
+    ]
+}
+
 impl AppServices {
     pub(crate) fn backend_binary_path(&self) -> Arc<PathBuf> {
         self.backend_binary_path.clone()
@@ -131,6 +170,7 @@ impl AppServices {
             task_manager_delete_hook: self.task_manager_delete_hook.clone(),
             runtime_helper_bin: self.runtime_helper_bin.clone(),
             runtime_base_url: self.runtime_base_url.clone(),
+            runtime_environment: self.runtime_environment.clone(),
             runtime_token_service: self.runtime_token_service.clone(),
             project_service: self.project_service.clone(),
             user_order_store: self.user_order_store.clone(),
@@ -296,6 +336,7 @@ impl AppServices {
             .and_then(|p| p.canonicalize().ok())
             .and_then(|p| p.parent().map(|pp| pp.to_path_buf()))
             .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let pdf_runtime_environment = resolve_pdf_runtime_environment(&app_resource_dir);
         let skill_paths = Arc::new(aionui_extension::resolve_skill_paths(&app_resource_dir, &data_dir));
         if identity_mode.is_local() {
             aionui_extension::sync_skill_catalog_into_repo(skill_paths.as_ref(), skill_repo.as_ref())
@@ -401,6 +442,7 @@ impl AppServices {
             task_manager_delete_hook: Some(task_manager_delete_hook.clone()),
             runtime_helper_bin: runtime_helper_bin.clone(),
             runtime_base_url: runtime_base_url.clone(),
+            runtime_environment: pdf_runtime_environment.clone(),
             runtime_token_service: runtime_token_service.clone(),
             project_service: project_service.clone(),
             user_order_store: user_order_store.clone(),
@@ -460,6 +502,7 @@ impl AppServices {
             backend_binary_path,
             runtime_helper_bin,
             runtime_base_url,
+            runtime_environment: pdf_runtime_environment,
         })
     }
 }
@@ -476,6 +519,7 @@ struct ConversationServiceDeps<'a> {
     task_manager_delete_hook: Option<Arc<dyn OnConversationDelete>>,
     runtime_helper_bin: String,
     runtime_base_url: String,
+    runtime_environment: Vec<(String, String)>,
     runtime_token_service: Arc<RuntimeTokenService>,
     project_service: ProjectService,
     /// Sidebar ordering store. Wired as a second delete hook so deleting a
@@ -500,6 +544,7 @@ fn build_conversation_service(deps: ConversationServiceDeps<'_>) -> Conversation
     )
     .with_runtime_state(deps.conversation_runtime_state)
     .with_runtime_helper_context(deps.runtime_helper_bin, deps.runtime_base_url)
+    .with_runtime_environment(deps.runtime_environment)
     .with_runtime_token_service(deps.runtime_token_service);
     service.with_mcp_server_repo(Arc::new(SqliteMcpServerRepository::new(deps.database.pool().clone())));
     service.with_assistant_definition_repo(Arc::new(SqliteAssistantDefinitionRepository::new(

@@ -6,6 +6,31 @@ license: Proprietary. LICENSE.txt has complete terms
 
 > **⚠️ Platform note — read before running any command.** The command examples here are written for **macOS / Linux**. On **Windows**: run `python` (or `py`) instead of `python3`, use `$env:USERPROFILE\…` and backslashes instead of `~/…`, and translate any shell pipes/redirects (`|`, `>`, `&&`) to their PowerShell equivalents before running. The scripts themselves are cross-platform; only the way you invoke them differs.
 
+## AionUI Win7 offline runtime
+
+The Windows 7 x64 portable package includes Python **3.8.10**, `pypdf`,
+`reportlab`, `Pillow`, `pdf2image`, and Poppler. Always prefer the paths exposed
+by the host application instead of a system Python:
+
+```powershell
+& $env:AIONUI_PYTHON .\scripts\merge_pdfs.py input.pdf output.pdf
+$env:AIONUI_PDF_POPPLER  # directory containing pdftoppm.exe/pdftocairo.exe
+```
+
+The same variables are injected into every skill and script subprocess:
+`AIONUI_PYTHON`, `AIONUI_PDF_RUNTIME`, `AIONUI_PDF_POPPLER`, and
+`AIONUI_PYTHON_VERSION=3.8.10`. `pdf2image` calls must pass
+`poppler_path=$env:AIONUI_PDF_POPPLER` when the library does not discover it
+automatically. The package is fully offline; do not run `pip install` from a
+skill.
+
+Advanced optional tooling described in `reference.md` (OCR/Tesseract,
+`pdfplumber`, `pypdfium2`, `qpdf`, `pdftk`, and JavaScript PDF stacks) is not
+bundled unless the manifest explicitly lists it. If one of those tools is
+requested and it is unavailable, report a clear **offline runtime unavailable**
+message and continue with the core operations instead of attempting a network
+download.
+
 # PDF Processing Guide
 
 ## Overview

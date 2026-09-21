@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aionui_api_types::{CreateProviderRequest, ProviderResponse, UpdateProviderRequest};
+use aionui_api_types::{CreateProviderRequest, ProviderCredentialsResponse, ProviderResponse, UpdateProviderRequest};
 use aionui_common::{decrypt_string, encrypt_string};
 use aionui_db::{CreateProviderParams, IProviderRepository, UpdateProviderParams, models::Provider};
 use serde::de::DeserializeOwned;
@@ -77,10 +77,14 @@ impl ProviderService {
     ) -> Result<ProviderResponse, SystemError> {
         validate_update_request(&req)?;
 
+        // A masked/empty value means the caller is editing other fields and
+        // wants to keep the existing credential. Only a non-empty, non-mask
+        // value is treated as a replacement key.
         let encrypted_key = req
             .api_key
             .as_deref()
-            .map(|k| encrypt_string(k, &self.encryption_key))
+            .filter(|key| !is_masked_api_key(key) && !key.trim().is_empty())
+            .map(|key| encrypt_string(key, &self.encryption_key))
             .transpose()?;
         let models_json = serialize_opt(&req.models, "models")?;
         let capabilities_json = serialize_opt(&req.capabilities, "capabilities")?;
@@ -117,16 +121,25 @@ impl ProviderService {
         Ok(())
     }
 
+    /// Resolve a provider's encrypted credential for a runtime operation.
+    /// This is intentionally separate from normal CRUD responses so list and
+    /// settings flows never receive plaintext API keys.
+    pub async fn credentials(&self, user_id: &str, id: &str) -> Result<ProviderCredentialsResponse, SystemError> {
+        let row = self
+            .repo
+            .find_by_id(user_id, id)
+            .await?
+            .ok_or_else(|| SystemError::NotFound(format!("Provider {id} not found")))?;
+        let api_key = decrypt_string(&row.api_key_encrypted, &self.encryption_key)?;
+        Ok(ProviderCredentialsResponse { api_key })
+    }
+
     // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
 
-    /// Convert a DB row into a response DTO with the plaintext API key
-    /// (decrypted) and deserialized JSON fields.
-    ///
-    /// Pre-launch: the response returns the API key in plaintext so the
-    /// frontend can migrate its local store to the backend without losing
-    /// the key on re-read. Storage remains encrypted at rest.
+    /// Convert a DB row into a response DTO with a masked API key and
+    /// deserialized JSON fields.
     fn row_to_response(&self, row: Provider) -> Result<ProviderResponse, SystemError> {
         // Lenient on decryption: a credential encrypted under a rotated/lost
         // key (e.g. one saved during the ELECTRON-3T0 broken session, whose
@@ -134,7 +147,7 @@ impl ProviderService {
         // provider list down. Surface the row with an empty api_key so the
         // user can see it and re-enter the key; log at warn for production
         // diagnosability.
-        let api_key = match decrypt_string(&row.api_key_encrypted, &self.encryption_key) {
+        let decrypted_api_key = match decrypt_string(&row.api_key_encrypted, &self.encryption_key) {
             Ok(key) => key,
             Err(error) => {
                 tracing::warn!(
@@ -145,6 +158,13 @@ impl ProviderService {
                 );
                 String::new()
             }
+        };
+        let api_key_configured = !decrypted_api_key.trim().is_empty();
+        let api_key_count = count_api_keys(&decrypted_api_key);
+        let api_key = if api_key_configured {
+            MASKED_API_KEY.to_owned()
+        } else {
+            String::new()
         };
 
         let models: Vec<String> = serde_json::from_str(&row.models)
@@ -165,6 +185,8 @@ impl ProviderService {
             name: row.name,
             base_url: row.base_url,
             api_key,
+            api_key_configured,
+            api_key_count,
             models,
             enabled: row.enabled,
             capabilities,
@@ -179,6 +201,20 @@ impl ProviderService {
             updated_at: row.updated_at,
         })
     }
+}
+
+const MASKED_API_KEY: &str = "***";
+
+fn is_masked_api_key(value: &str) -> bool {
+    value.trim() == MASKED_API_KEY
+}
+
+fn count_api_keys(value: &str) -> usize {
+    value
+        .split(|c| c == ',' || c == '\n' || c == '\r')
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .count()
 }
 
 // ---------------------------------------------------------------------------
@@ -530,15 +566,16 @@ mod tests {
         assert_eq!(created.platform, "anthropic");
         assert_eq!(created.name, "Anthropic");
         assert_eq!(created.base_url, "https://api.anthropic.com");
-        // API key is returned in plaintext (pre-launch; encrypted at rest).
-        assert_eq!(created.api_key, "sk-ant-api03-test1234");
+        assert_eq!(created.api_key, "***");
+        assert!(created.api_key_configured);
+        assert_eq!(created.api_key_count, 1);
         assert_eq!(created.models, vec!["claude-sonnet-4-20250514"]);
         assert!(created.enabled);
 
         let all = svc.list(TEST_USER_ID).await.unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].id, created.id);
-        assert_eq!(all[0].api_key, "sk-ant-api03-test1234");
+        assert_eq!(all[0].api_key, "***");
     }
 
     #[tokio::test]
@@ -607,17 +644,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_response_api_key_plaintext_matches_input() {
-        // Replaces the masking test: api_key on the response is the
-        // encrypted-then-decrypted plaintext (equal to the input).
+    async fn provider_response_api_key_is_masked_and_credentials_are_explicit() {
         let svc = setup().await;
         let req = CreateProviderRequest {
             api_key: "sk-secret-original-value".into(),
             ..sample_create_request()
         };
         let created = svc.create(TEST_USER_ID, req).await.unwrap();
-        assert_eq!(created.api_key, "sk-secret-original-value");
-        assert!(!created.api_key.contains("***"));
+        assert_eq!(created.api_key, "***");
+        assert!(created.api_key_configured);
+        let credentials = svc.credentials(TEST_USER_ID, &created.id).await.unwrap();
+        assert_eq!(credentials.api_key, "sk-secret-original-value");
     }
 
     #[tokio::test]
@@ -669,8 +706,28 @@ mod tests {
             .await
             .unwrap();
 
-        // Response carries the new plaintext key (encrypted at rest).
-        assert_eq!(updated.api_key, "new-key-abcdefgh");
+        assert_eq!(updated.api_key, "***");
+        assert_eq!(
+            svc.credentials(TEST_USER_ID, &created.id).await.unwrap().api_key,
+            "new-key-abcdefgh"
+        );
+
+        let preserved = svc
+            .update(
+                TEST_USER_ID,
+                &created.id,
+                UpdateProviderRequest {
+                    api_key: Some("***".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(preserved.api_key, "***");
+        assert_eq!(
+            svc.credentials(TEST_USER_ID, &created.id).await.unwrap().api_key,
+            "new-key-abcdefgh"
+        );
     }
 
     #[tokio::test]
@@ -782,7 +839,7 @@ mod undecryptable_row_tests {
         assert_eq!(list.len(), 2);
         let good_row = list.iter().find(|p| p.id == good.id).unwrap();
         let bad_row = list.iter().find(|p| p.id == bad.id).unwrap();
-        assert_eq!(good_row.api_key, "sk-good", "healthy rows keep decrypting");
+        assert_eq!(good_row.api_key, "***", "healthy rows keep decrypting");
         assert_eq!(bad_row.api_key, "", "undecryptable row degrades to an empty key");
     }
 }

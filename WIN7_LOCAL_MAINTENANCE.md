@@ -109,6 +109,36 @@ NODE
 - 报告“启动 npx 失败”时先检查 AionCore 是否用最新本地源码重新编译、托管 Node 文件是否随包
   更新，以及数据库中的旧 MCP JSON 是否已被启动迁移修复；不要只修改界面提示。
 
+## 离线 PDF skill 运行时
+
+Win7 便携包在构建阶段由 `scripts/prepare-pdf-runtime.js` 下载并校验以下固定组件：
+
+- Python 3.8.10 embeddable x64（最后一代官方支持 Win7 的 Python）；
+- `pypdf 5.9.0`、`reportlab 4.2.5`、`Pillow 10.4.0`、`pdf2image 1.17.0`；
+- Poppler Windows x64 `23.11.0-0`。
+
+组件会进入 `resources/pdf-runtime/win32-x64/`，并写入 `resources/pdf-runtime/manifest.json`。
+manifest 对每个文件记录 SHA-256，`scripts/verify-pdf-runtime.js` 和 `afterPack.js` 会在打包前后
+分别校验。Action 网络失败时构建应明确失败，不能生成缺少依赖的“伪离线包”；重跑时已有完整
+runtime 会跳过重复下载。下载依赖时可设置 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`。
+
+PDF skill 和所有 Agent/skill/script 子进程都会收到：
+`AIONUI_PYTHON`、`AIONUI_PDF_RUNTIME`、`AIONUI_PDF_POPPLER`、`AIONUI_PYTHON_VERSION`。
+因此脚本应优先调用 `$env:AIONUI_PYTHON`，`pdf2image` 应把
+`poppler_path=$env:AIONUI_PDF_POPPLER` 传给转换函数，禁止离线包内执行 `pip install`。
+OCR/Tesseract、`pdfplumber`、`pypdfium2`、`qpdf`、`pdftk` 等未列入 manifest 的高级能力必须
+提示“离线运行时未提供”，不得静默联网下载或伪装成功。
+
+本地验证命令：
+
+```bash
+node scripts/verify-pdf-runtime.js
+```
+
+Win7 Action 构建会在 `node scripts/build-with-builder.js x64 --win --x64 --win7` 中自动准备、校验并
+将该目录放入最终 ZIP；便携包验收时应检查 `resources/pdf-runtime/python.exe`、四个 Python 包、
+`poppler/pdftoppm.exe` 和 manifest 哈希均存在。
+
 ## 验证清单
 
 在 Windows 构建机运行：
@@ -145,6 +175,9 @@ NODE
 - `packages/desktop/src/renderer/pages/settings/components/AddModelModal.tsx`、`useAionrsModelSelection.ts`：思考强度改为可控勾选，并在会话中合并最新模型设置。
 - `scripts/build-with-builder.js`：无 Wine 的 Linux 构建也必须保留 PE 资源编辑，禁止因跳过签名而丢失 AionUI 图标。
 - `AionCore/crates/aionui-mcp/`、`aionui-ai-agent/`、`aionui-runtime/`：识别旧版 `aionui-browser` Electron 路径并强制走托管 Node；Windows managed Node 必须包含真实 `npm-cli.js`/`npx-cli.js`，不能只保留版本探测 wrapper。
+- `scripts/prepare-pdf-runtime.js`、`scripts/verify-pdf-runtime.js`：Action 下载并校验 Win7 Python 3.8.10、PDF wheels 与 Poppler，构建失败时阻止生成不完整离线包。
+- `packages/desktop/electron-builder.yml`、`scripts/build-with-builder.js`、`scripts/afterPack.js`：将 PDF runtime 纳入 Windows 资源并在打包后验证文件哈希。
+- `AionCore/crates/aionui-app/src/services.rs`、`aionui-conversation/src/service.rs`：把包内 Python/Poppler 路径注入所有 skill/script 子进程环境。
 - `client-patches/0001-win7-auth-and-config-sync.patch`、`client-patches/0002-win7-market-and-logs.patch`：客户端 Win7 专用补丁；同步客户端代码时要重新应用并核对上下文。
 
 本轮回归还要求 AionCore 启动 officecli 子进程时显式注入：
@@ -171,6 +204,13 @@ DOTNET_SYSTEM_GLOBALIZATION_USENLS=1
 - 验证：`cargo test -p aionui-office` 的 104 个单元测试通过；代理集成测试因当前 Linux 环境端口/代理返回 503，未作为本次回归判定依据。
 
 ## 同步官方最新源码
+
+## Provider API Key 脱敏回归
+
+- `/api/providers` 的 `api_key` 只返回 `***`，并附带 `api_key_configured` 与 `api_key_count`；明文仅通过受认证的 `/api/providers/:id/credentials` 供运行时使用。
+- 编辑 Provider 时提交空值或 `***` 表示保留原 Key，只有主动输入新 Key 才替换；云端 `/api/config` 拉取的 Key 在设置表单中也只显示占位符。
+- 已保存 Provider 的模型列表使用 `/api/providers/:id/models`，不把占位符当作真实 Key 发给匿名接口；图像生成 MCP 在同步环境变量时按 Provider ID 解析真实凭据。
+- 回归验证：`cargo test -p aionui-system --test provider_routes`、`bunx tsc --noEmit`、`bunx vitest run tests/unit/common-config/modelCapabilities.dom.test.tsx`。
 
 当前仓库的 `origin` 是个人镜像时，先添加官方只读 remote：
 
