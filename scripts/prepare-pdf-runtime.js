@@ -52,7 +52,9 @@ function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: PROJECT_ROOT,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    // Pass arguments directly on Windows. Using cmd.exe here breaks the
+    // Python `-c` extraction snippet by splitting it at spaces/semicolons.
+    shell: false,
     env: process.env,
     ...options,
   });
@@ -62,7 +64,7 @@ function run(command, args, options = {}) {
 
 function findPython() {
   for (const candidate of process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3', 'python']) {
-    const result = spawnSync(candidate, ['--version'], { stdio: 'ignore', shell: process.platform === 'win32' });
+    const result = spawnSync(candidate, ['--version'], { stdio: 'ignore', shell: false });
     if (result.status === 0) return candidate;
   }
   throw new Error('未找到宿主 Python。Action runner 必须预装 Python 3，才能下载并展开 Win7 PDF 依赖。');
@@ -81,7 +83,7 @@ function download(url, destination) {
   const curl = spawnSync(
     'curl',
     ['-L', '--fail', '--retry', '3', '--retry-delay', '2', '--connect-timeout', '30', '-o', destination, url],
-    { cwd: PROJECT_ROOT, stdio: 'inherit', shell: process.platform === 'win32', env: process.env }
+    { cwd: PROJECT_ROOT, stdio: 'inherit', shell: false, env: process.env }
   );
   if (curl.status !== 0) {
     throw new Error(`下载失败：${url}（curl exit ${curl.status}）。请检查 Action 网络或代理设置。`);
