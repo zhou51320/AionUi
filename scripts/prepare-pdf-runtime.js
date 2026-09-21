@@ -165,7 +165,9 @@ function preparePoppler(targetRoot, wheelDir) {
   if (!bin) throw new Error('Poppler 压缩包中未找到 pdftoppm.exe，无法启用 pdf2image。');
   const destination = path.join(targetRoot, 'poppler');
   fs.rmSync(destination, { recursive: true, force: true });
-  fs.cpSync(path.dirname(bin), destination, { recursive: true });
+  // Copy the directory that actually contains pdftoppm.exe (not its parent
+  // `Library` directory), so AIONUI_PDF_POPPLER points at the executable dir.
+  fs.cpSync(bin, destination, { recursive: true });
   return path.relative(targetRoot, destination).replace(/\\/g, '/');
 }
 
