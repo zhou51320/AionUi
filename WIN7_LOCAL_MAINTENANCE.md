@@ -49,6 +49,13 @@ cd ..
 
 GitHub Actions 的等价入口是 `.github/workflows/build-win7-cli.yml`。它会构建、执行 `scripts/verify-win7-compat.ps1`，然后生成 `aioncore-win7-x64.zip`。Actions 只用于生成构建产物，不替代本地 Win7 真机验收。
 
+2026-09-21 重新触发 Action `35573527588`（提交 `ef1f5173e`）并通过 Win7 PE 检查；产物中的
+`aioncore.exe` SHA-256 为 `0f8c95e60b04acd8cc8296af14467700e7c89b35bbea1d7c01a7e029adce7783`。
+该核心已替换进本地便携包
+`AionUi-2.2.2-win-x64-pdf-runtime-portable-win7-action35573527588.zip`，ZIP SHA-256 为
+`833722d948b174a010a516fc5409d322c09a4183b2a2ee2f296e4085189351b8`；重新解压后的导入表未发现
+`GetSystemTimePreciseAsFileTime`、`api-ms-win-core-winrt`、`bcryptprimitives.dll` 或 `ProcessPrng`。
+
 Linux 构建机如果缺少 `wine`，electron-builder 可能在 NSIS 安装器的最后阶段失败（`spawn wine ENOENT`），即使 `out/win-unpacked` 已完整生成。此时可以先确认资源校验通过，再用 7-Zip 将便携目录压成 ZIP：
 
 ```bash

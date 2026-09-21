@@ -41,6 +41,7 @@
 
 - Win7 目标是 Windows 7 SP1 x64；不得把普通 Windows x64 构建冒充 Win7 构建。
 - 桌面包必须使用仓库脚本选择的 Win7 Electron（`--win7`，当前版本由 `scripts/prepare-win7-electron.js` 固定），Rust AionCore 使用 `x86_64-win7-windows-msvc` 与 nightly `-Zbuild-std`。
+- AionCore/aioncore.exe 的 Win7 版本必须通过 `.github/workflows/build-win7-cli.yml` 构建并取得产物；不得用普通 Windows x64、Linux 交叉编译或未经 `scripts/verify-win7-compat.ps1` 检查的本地产物替代。将其放入桌面便携包前，必须记录 Action run ID、校验 SHA-256，并确认导入表不含 Win7 缺失 API（例如 `GetSystemTimePreciseAsFileTime`）。
 - 内置 `officecli.exe` 必须随包放在 `resources/`，不得要求用户手动安装或手动填写路径。Win7 子进程需要 invariant globalization 与 NLS 环境变量。
 - Windows 可执行文件必须使用仓库 `resources/app.ico` 的 AionUI 图标；禁止用 `signAndEditExecutable=false` 跳过 PE 资源编辑而产生 Electron 默认图标。具体校验和打包说明见 `WIN7_LOCAL_MAINTENANCE.md`。
 - 内置 MCP 依赖托管 Node；Win7 包内必须包含真实 npm/npx CLI（`node_modules/npm/bin/npm-cli.js`、`npx-cli.js`），不得用只能返回版本号的 wrapper 冒充运行时。

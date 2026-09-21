@@ -56,7 +56,7 @@ if ($Dumpbin) {
 } else {
     Write-Host "dumpbin.exe not in PATH. Performing binary string scan..." -ForegroundColor Yellow
     $Content = [System.IO.File]::ReadAllText($TargetBinary, [System.Text.Encoding]::ASCII)
-    $IncompatibleSymbols = @("ProcessPrng", "bcryptprimitives.dll", "api-ms-win-core-winrt")
+    $IncompatibleSymbols = @("ProcessPrng", "bcryptprimitives.dll", "api-ms-win-core-winrt", "GetSystemTimePreciseAsFileTime")
     $FoundAny = $false
 
     foreach ($sym in $IncompatibleSymbols) {
