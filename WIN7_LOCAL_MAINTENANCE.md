@@ -157,6 +157,13 @@ Win7 Action 构建会在 `node scripts/build-with-builder.js x64 --win --x64 --w
 
 本轮 Linux 便携包已生成：`out/AionUi-2.2.2-win-x64.zip`（SHA-256：`9a33ac7de3fe4995d8e8aba6e0a766a9963ae5bed1111f72f00585e1a4e98e4f`）。包内 AionCore 来自 Action `35503847266`（SHA-256：`b2307725c8f12a2b162ddaeb099a0197d43a184ddc879cccdf673a771b9a002a`）。
 
+PDF runtime 验收记录：Action `35568895115`（提交 `bfa26f175`）生成并上传
+`AionUi-windows-x64-portable.zip`；本地副本为
+`AionUi-2.2.2-win-x64-pdf-runtime-portable.zip`，SHA-256：
+`97e2a0f5f6c800c03f8030769c9666d3305669bb36ac1c887bbb523fc291ec5b`。
+ZIP 内 manifest 的 453 个文件哈希全部通过，且包含 Python 3.8.10、四个固定 PDF 包、Poppler、
+officecli、AionCore 和 AionUI `AionUi.exe`。
+
 ## 相对官方上游的本地改动
 
 以下是需要在后续同步中保留并复核的本地改动；具体代码以当前工作树为准：
