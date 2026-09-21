@@ -40,8 +40,9 @@ function verifyBundledResources(resourcesDir, electronPlatformName, targetArch) 
 
 function verifyBundledPdfRuntime(resourcesDir, electronPlatformName, targetArch) {
   if (electronPlatformName !== 'win32' || targetArch !== 'x64') return;
-  const runtimeRoot = path.join(resourcesDir, 'pdf-runtime');
-  const manifestPath = path.join(runtimeRoot, 'manifest.json');
+  const runtimePackageRoot = path.join(resourcesDir, 'pdf-runtime');
+  const runtimeRoot = path.join(runtimePackageRoot, 'win32-x64');
+  const manifestPath = path.join(runtimePackageRoot, 'manifest.json');
   if (!fs.existsSync(manifestPath)) throw new Error(`Packaged app is missing PDF runtime manifest: ${manifestPath}`);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   if (manifest.platform !== 'win32-x64' || manifest.python?.version !== '3.8.10') {
