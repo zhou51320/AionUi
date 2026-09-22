@@ -49,6 +49,7 @@ cd ..
 
 GitHub Actions 的等价入口是 `.github/workflows/build-win7-cli.yml`。它会构建、执行 `scripts/verify-win7-compat.ps1`，然后生成 `aioncore-win7-x64.zip`。Actions 只用于生成构建产物，不替代本地 Win7 真机验收。
 该 workflow 现在还会在同一 Windows 2022 runner 上准备 managed-resources、Win7 Electron、离线 PDF runtime，并调用 `node scripts/build-with-builder.js x64 --win --x64 --win7` 生成 NSIS 安装包。桌面产物上传为 `aionui-win7-nsis`，包含 `out/*.exe` 和 `out/*portable.zip`；构建后会再次检查 `out/win-unpacked/resources/bundled-aioncore/win32-x64/aioncore.exe` 和 PDF runtime manifest。
+Action `35706992465` 已成功生成 NSIS 安装包 `AionUi-2.2.2-win-x64.exe`（SHA-256：`d944fc7fe19ef3d38b284d93e96bf368e595b70d09545f721ce53dfc25d52eb5`，约 202 MB）以及 `aioncore-win7-x64.zip`（SHA-256：`c242caf310547c706ba274584a8067592006df209a2fcea5745f9dd6f1894941`）。独立核心解压后 SHA-256 为 `e54947ba8088c076bfb0aedb6f58bef0d1a86db0d1609a3452e0d422160b3139`，导入表通过 Win7 检查。
 
 2026-09-21 重新触发 Action `35573527588`（提交 `ef1f5173e`）并通过 Win7 PE 检查；产物中的
 `aioncore.exe` SHA-256 为 `0f8c95e60b04acd8cc8296af14467700e7c89b35bbea1d7c01a7e029adce7783`。
