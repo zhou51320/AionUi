@@ -12,6 +12,25 @@ The Windows 7 x64 portable package includes Python **3.8.10**, `pypdf`,
 `reportlab`, `Pillow`, `pdf2image`, and Poppler. Always prefer the paths exposed
 by the host application instead of a system Python:
 
+### Mandatory runtime decision (do this first)
+
+On AionUI Win7, **do not search for Python, run `pip install`, or probe random
+folders**. The host has already resolved the bundled runtime and injects these
+environment variables into this skill process:
+
+| Variable | Use |
+| --- | --- |
+| `AIONUI_PYTHON` | Absolute path to the bundled `python.exe` (Python 3.8.10) |
+| `AIONUI_PDF_RUNTIME` | Root of the bundled Python/PDF runtime |
+| `AIONUI_PDF_POPPLER` | Directory containing `pdftoppm.exe` and `pdftocairo.exe` |
+| `AIONUI_PYTHON_VERSION` | Bundled version, currently `3.8.10` |
+
+Use the variables directly. If `AIONUI_PYTHON` is set, assume the runtime is
+available and start the PDF operation immediately; only report an offline
+runtime error when the explicitly supplied executable cannot be launched.
+For normal text extraction use `pypdf` and do **not** invoke Poppler. Use
+Poppler only for scanned/image-only PDFs, passing its directory explicitly.
+
 ```powershell
 & $env:AIONUI_PYTHON .\scripts\merge_pdfs.py input.pdf output.pdf
 $env:AIONUI_PDF_POPPLER  # directory containing pdftoppm.exe/pdftocairo.exe
@@ -26,10 +45,9 @@ skill.
 
 Advanced optional tooling described in `reference.md` (OCR/Tesseract,
 `pdfplumber`, `pypdfium2`, `qpdf`, `pdftk`, and JavaScript PDF stacks) is not
-bundled unless the manifest explicitly lists it. If one of those tools is
-requested and it is unavailable, report a clear **offline runtime unavailable**
-message and continue with the core operations instead of attempting a network
-download.
+bundled. Do not spend time looking for or downloading these tools. If one is
+requested, report **offline runtime unavailable** and continue with the core
+operation where possible.
 
 # PDF Processing Guide
 
