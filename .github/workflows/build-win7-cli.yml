@@ -1,4 +1,4 @@
-name: '🪟 Build Win7 Aion CLI'
+name: '🪟 Build Win7 AionCore + Desktop'
 
 permissions:
   contents: write
@@ -11,6 +11,11 @@ on:
         description: 'Branch, tag or commit to build'
         required: true
         default: 'main'
+        type: string
+      aioncore_run_id:
+        description: 'Existing AionCore workflow run id; required for desktop packaging'
+        required: false
+        default: ''
         type: string
   push:
     branches:
@@ -67,6 +72,7 @@ jobs:
           bun run postinstall || true
 
       - name: Build Aion CLI (x86_64-win7-windows-msvc)
+        if: ${{ !inputs.aioncore_run_id }}
         shell: bash
         working-directory: AionCore
         run: |
@@ -79,6 +85,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Verify Windows 7 PE Compatibility
+        if: ${{ !inputs.aioncore_run_id }}
         shell: powershell
         run: |
           $cliPath = "AionCore/target/x86_64-win7-windows-msvc/release/aioncore.exe"
@@ -90,6 +97,7 @@ jobs:
           & scripts/verify-win7-compat.ps1 -ExePath $cliPath
 
       - name: Prepare local AionCore bundle for desktop packaging
+        if: ${{ !inputs.aioncore_run_id }}
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -103,6 +111,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "prepare-managed-resources failed with exit code $LASTEXITCODE" }
           Remove-Item $dataDir -Recurse -Force -ErrorAction SilentlyContinue
           node -e "const fs=require('fs'); const p='resources/bundled-aioncore-local/win32-x64/managed-resources/manifest.json'; if(!fs.existsSync(p)) throw new Error('managed-resources manifest missing'); console.log('managed-resources ready')"
+
+      - name: Download reusable AionCore artifact
+        if: ${{ inputs.aioncore_run_id }}
+        shell: bash
+        env:
+          AIONUI_BACKEND_RUN_ID: ${{ inputs.aioncore_run_id }}
+          AIONUI_BACKEND_ARCH: x64
+        run: node scripts/prepareAioncore.js
 
       - name: Prepare offline PDF runtime
         shell: bash
@@ -118,6 +134,7 @@ jobs:
           npm_config_runtime: electron
           npm_config_disturl: https://electronjs.org/headers
           ELECTRON_WIN7: '1'
+          AIONUI_BACKEND_RUN_ID: ${{ inputs.aioncore_run_id }}
           CI: 'true'
         run: |
           $ErrorActionPreference = 'Stop'
@@ -134,7 +151,9 @@ jobs:
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path "dist/win7-cli"
-          Copy-Item "AionCore/target/x86_64-win7-windows-msvc/release/aioncore.exe" "dist/win7-cli/aioncore.exe"
+          $core = 'resources/bundled-aioncore-local/win32-x64/aioncore.exe'
+          if (-not (Test-Path $core)) { $core = 'resources/bundled-aioncore/win32-x64/aioncore.exe' }
+          Copy-Item $core "dist/win7-cli/aioncore.exe"
           Compress-Archive -Path "dist/win7-cli/*" -DestinationPath "aioncore-win7-x64.zip" -Force
 
       - name: Upload Artifact
