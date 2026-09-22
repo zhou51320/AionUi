@@ -145,6 +145,10 @@ jobs:
           if (-not $installer) { throw 'Win7 NSIS installer was not generated' }
           $packagedCore = 'out/win-unpacked/resources/bundled-aioncore/win32-x64/aioncore.exe'
           if (-not (Test-Path $packagedCore)) { throw "Packaged AionCore missing: $packagedCore" }
+          $managedManifest = 'out/win-unpacked/resources/bundled-aioncore/win32-x64/managed-resources/manifest.json'
+          if (-not (Test-Path $managedManifest)) { throw "Packaged managed resources missing: $managedManifest" }
+          $managedNode = 'out/win-unpacked/resources/bundled-aioncore/win32-x64/managed-resources/node/node-v24.11.0-win-x64/node.exe'
+          if (-not (Test-Path $managedNode)) { throw "Packaged managed Node missing: $managedNode" }
           & scripts/verify-win7-compat.ps1 -ExePath $packagedCore
           if (-not (Test-Path 'out/win-unpacked/resources/pdf-runtime/manifest.json')) { throw 'Packaged PDF runtime manifest missing' }
           Write-Host "Win7 NSIS installer generated: $($installer.FullName)"
