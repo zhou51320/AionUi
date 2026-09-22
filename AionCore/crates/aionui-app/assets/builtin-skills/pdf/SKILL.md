@@ -25,11 +25,21 @@ environment variables into this skill process:
 | `AIONUI_PDF_POPPLER` | Directory containing `pdftoppm.exe` and `pdftocairo.exe` |
 | `AIONUI_PYTHON_VERSION` | Bundled version, currently `3.8.10` |
 
-Use the variables directly. If `AIONUI_PYTHON` is set, assume the runtime is
-available and start the PDF operation immediately; only report an offline
-runtime error when the explicitly supplied executable cannot be launched.
-For normal text extraction use `pypdf` and do **not** invoke Poppler. Use
-Poppler only for scanned/image-only PDFs, passing its directory explicitly.
+Fixed-path fallback (use this before searching the machine):
+
+- Installed build: `%LOCALAPPDATA%\\Programs\\AionUi\\resources\\pdf-runtime\\win32-x64`
+- Portable build: `<AionUi.exe directory>\\resources\\pdf-runtime\\win32-x64`
+- Python: `<runtime>\\python.exe`; Poppler: `<runtime>\\poppler`
+- Tesseract OCR: `<runtime>\\tesseract\\tesseract.exe`
+- OCR languages: `<runtime>\\tesseract\\tessdata`
+
+Use the variables directly when present; otherwise construct the fixed installed
+or portable path above. Do not scan PATH, search random folders, or run pip.
+If `AIONUI_PYTHON` is set, assume the runtime is available and start the PDF
+operation immediately; only report an offline runtime error when the explicitly
+supplied executable cannot be launched. For normal text extraction use `pypdf`
+and do **not** invoke Poppler. Use Poppler only for scanned/image-only PDFs,
+then run bundled Tesseract with `-l chi_sim+eng` and `--tessdata-dir`.
 
 ```powershell
 & $env:AIONUI_PYTHON .\scripts\merge_pdfs.py input.pdf output.pdf
@@ -43,11 +53,10 @@ The same variables are injected into every skill and script subprocess:
 automatically. The package is fully offline; do not run `pip install` from a
 skill.
 
-Advanced optional tooling described in `reference.md` (OCR/Tesseract,
-`pdfplumber`, `pypdfium2`, `qpdf`, `pdftk`, and JavaScript PDF stacks) is not
-bundled. Do not spend time looking for or downloading these tools. If one is
-requested, report **offline runtime unavailable** and continue with the core
-operation where possible.
+The Win7 PDF runtime bundles Tesseract OCR with `chi_sim` and `eng` language
+data. For image-only PDFs, OCR is required after rendering; do not claim that
+rendering alone extracted text. If the fixed Tesseract path is missing, report
+**offline OCR runtime unavailable** and include the expected path.
 
 # PDF Processing Guide
 

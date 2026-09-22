@@ -25,7 +25,12 @@ AI-friendly CLI for .docx, .xlsx, .pptx. Single binary, no dependencies, no Offi
 
 ## OfficeCLI Executable Resolution (Pre-bundled in AionUi)
 
-`officecli` is pre-bundled in AionUi. **Do not run manual install scripts and do not ask the user to configure a path before trying the resolver below.** Locate and invoke the bundled binary in the following order:
+`officecli` is pre-bundled in AionUi. Fixed packaged paths are:
+
+- Installed: `%LOCALAPPDATA%\\Programs\\AionUi\\resources\\officecli.exe`
+- Portable: `<AionUi.exe directory>\\resources\\officecli.exe`
+
+**Do not run manual install scripts or ask the user to configure a path before trying these paths.** Locate and invoke the bundled binary in the following order:
 1. Direct command if available in PATH: `officecli` or `officecli.exe`.
 2. On Windows, resolve the packaged binary with PowerShell:
 
