@@ -17,12 +17,6 @@ on:
         required: false
         default: ''
         type: string
-  push:
-    branches:
-      - 'main'
-    tags:
-      - 'v*'
-
 env:
   CARGO_TERM_COLOR: always
   CARGO_HTTP_TIMEOUT: '600'
@@ -116,6 +110,7 @@ jobs:
         if: ${{ inputs.aioncore_run_id }}
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           AIONUI_BACKEND_RUN_ID: ${{ inputs.aioncore_run_id }}
           AIONUI_BACKEND_ARCH: x64
           AIONUI_BACKEND_REPO_OWNER: zhou51320
@@ -130,6 +125,7 @@ jobs:
       - name: Build Win7 NSIS desktop installer
         shell: powershell
         env:
+          GH_TOKEN: ${{ github.token }}
           NODE_OPTIONS: '--max-old-space-size=8192'
           ELECTRON_BUILDER_COMPRESSION_LEVEL: '5'
           npm_config_arch: x64

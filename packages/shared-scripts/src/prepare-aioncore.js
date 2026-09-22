@@ -323,13 +323,15 @@ function downloadFileWithAuth(url, outputPath) {
     // curl may be unavailable in some local environments; try gh before failing.
   }
 
-  execFileSync('gh', ['api', url, '--output', outputPath], {
+  const data = execFileSync('gh', ['api', url], {
     timeout: 120000,
+    maxBuffer: 1024 * 1024 * 1024,
     env: {
       ...process.env,
       GH_TOKEN: token || process.env.GH_TOKEN,
     },
   });
+  fs.writeFileSync(outputPath, data);
 }
 
 function listActionsArtifacts(runId) {
