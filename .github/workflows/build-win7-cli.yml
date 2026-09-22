@@ -112,7 +112,7 @@ jobs:
         shell: powershell
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
-          ELECTRON_BUILDER_COMPRESSION_LEVEL: 'normal'
+          ELECTRON_BUILDER_COMPRESSION_LEVEL: '5'
           npm_config_arch: x64
           npm_config_target_arch: x64
           npm_config_runtime: electron
