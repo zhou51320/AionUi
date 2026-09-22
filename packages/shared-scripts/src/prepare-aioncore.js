@@ -21,8 +21,8 @@ const os = require('os');
 const path = require('path');
 const { verifyBundledAioncoreResources } = require('./verify-bundled-aioncore-resources');
 
-const GITHUB_OWNER = 'iOfficeAI';
-const GITHUB_REPO = 'AionCore';
+const GITHUB_OWNER = process.env.AIONUI_BACKEND_REPO_OWNER || 'iOfficeAI';
+const GITHUB_REPO = process.env.AIONUI_BACKEND_REPO_NAME || 'AionCore';
 
 const ACTIONS_ARTIFACT_TARGETS = {
   'darwin-arm64': {
@@ -46,7 +46,7 @@ const ACTIONS_ARTIFACT_TARGETS = {
     manualPlatform: 'windows-arm64',
   },
   'win32-x64': {
-    artifactName: 'aioncore-manual-windows-x64',
+    artifactName: process.env.AIONUI_BACKEND_ARTIFACT_NAME || 'aioncore-manual-windows-x64',
     manualPlatform: 'windows-x64',
   },
 };

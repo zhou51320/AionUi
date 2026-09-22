@@ -118,6 +118,9 @@ jobs:
         env:
           AIONUI_BACKEND_RUN_ID: ${{ inputs.aioncore_run_id }}
           AIONUI_BACKEND_ARCH: x64
+          AIONUI_BACKEND_REPO_OWNER: zhou51320
+          AIONUI_BACKEND_REPO_NAME: AionUi
+          AIONUI_BACKEND_ARTIFACT_NAME: aioncore-win7-x64
         run: node scripts/prepareAioncore.js
 
       - name: Prepare offline PDF runtime
@@ -135,6 +138,9 @@ jobs:
           npm_config_disturl: https://electronjs.org/headers
           ELECTRON_WIN7: '1'
           AIONUI_BACKEND_RUN_ID: ${{ inputs.aioncore_run_id }}
+          AIONUI_BACKEND_REPO_OWNER: zhou51320
+          AIONUI_BACKEND_REPO_NAME: AionUi
+          AIONUI_BACKEND_ARTIFACT_NAME: aioncore-win7-x64
           CI: 'true'
         run: |
           $ErrorActionPreference = 'Stop'
