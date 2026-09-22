@@ -281,6 +281,39 @@ async fn user_scoped_imports_with_same_name_use_distinct_storage() {
 }
 
 #[tokio::test]
+async fn stale_skill_row_falls_back_to_current_builtin() {
+    let tmp = TempDir::new().unwrap();
+    let paths = make_paths(tmp.path());
+    create_skill(&paths.builtin_skills_dir, "pdf", "Current builtin PDF skill");
+
+    let db = init_database_memory().await.unwrap();
+    let user_id = create_test_user(&db, "stale_row_user").await;
+    let repo = SqliteSkillRepository::new(db.pool().clone());
+    repo.upsert_global(UpsertSkillParams {
+        name: "pdf",
+        description: Some("stale builtin row"),
+        path: tmp.path().join("old-builtin-path").to_string_lossy().as_ref(),
+        source: "builtin",
+        enabled: true,
+    })
+    .await
+    .unwrap();
+
+    let resolved = materialize_skills_for_agent_with_repo_for_user(
+        &paths,
+        &repo,
+        &user_id,
+        "conv-stale-builtin",
+        &["pdf".to_owned()],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(resolved.len(), 1);
+    assert_eq!(resolved[0].source_path, paths.builtin_skills_dir.join("pdf"));
+}
+
+#[tokio::test]
 async fn user_skill_override_wins_over_builtin_during_materialization() {
     let tmp = TempDir::new().unwrap();
     let paths = make_paths(tmp.path());

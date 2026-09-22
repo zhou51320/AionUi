@@ -175,8 +175,6 @@ Var /GLOBAL AionUiActiveMarkerResult
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\libEGL.dll" "libEGL.dll"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\libGLESv2.dll" "libGLESv2.dll"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\d3dcompiler_47.dll" "d3dcompiler_47.dll"
-  !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\dxcompiler.dll" "dxcompiler.dll"
-  !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\dxil.dll" "dxil.dll"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\vk_swiftshader.dll" "vk_swiftshader.dll"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\vulkan-1.dll" "vulkan-1.dll"
   !insertmacro AIONUI_VERIFY_REQUIRED_FILE "$INSTDIR\resources\app.asar" "resources\app.asar"

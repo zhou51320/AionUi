@@ -1430,9 +1430,10 @@ async fn resolve_skill_source_path_with_repo_for_user(
             deleted = row.deleted_at.is_some(),
             "skill row points at a missing directory"
         );
-        if row.user_id.is_some() {
-            return Ok(None);
-        }
+        // A stale user row must not hide a currently materialized builtin
+        // skill with the same name. This can happen after an upgrade when
+        // the builtin corpus moves from an older data directory; resolve the
+        // builtin fallback below before treating the name as unavailable.
     }
     let top = paths.builtin_skills_dir.join(name);
     if top.is_dir() {
