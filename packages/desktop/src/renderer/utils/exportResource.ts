@@ -62,7 +62,7 @@ export async function exportResourceArchive(params: ExportParams): Promise<void>
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${name.replace(/[\/:*?"<>|]/g, '_')}.zip`;
+    link.download = `${name.replace(/[/\\:*?"<>|]/g, '_')}.zip`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
