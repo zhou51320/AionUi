@@ -150,9 +150,9 @@ Win7 Action 构建会在 `node scripts/build-with-builder.js x64 --win --x64 --w
 
 ## 验证清单
 
-### 2026-09-22 E1030 安装后校验回归
+### 2026-09-23 E1030 安装后校验回归
 
-本轮修复 `resources/windows/support/verify-bundled-aioncore-install.ps1`：Win7 安装器对大体积 managed Node/npm 资源的落盘等待从约 5 秒延长到最多 120 秒，并与构建期校验一致检查真实 `npm-cli.js`/`npx-cli.js`。聚焦测试 21 项通过（Windows 专属 PowerShell 执行测试在 Linux 跳过）；`out/win-unpacked` 的 AionCore 校验通过，`checked=7`、`missing=[]`、`failures=[]`。
+对照用户提供的原版 `verify-bundled-aioncore-install.ps1`，确认此前新增的 PowerShell 2 JSON 兼容层、npm/npx 强制检查、`120` 次等待和 `ErrorActionPreference = Stop` 并非原版行为，可能在 Win7 上造成误判并触发 E1030。本轮恢复原版校验实现及其 5 次重试策略，移除这些新增阻断条件；聚焦测试 21 项通过（Windows 专属 PowerShell 执行测试在 Linux 跳过）。
 
 本机 Linux 无 Wine，electron-builder 在 NSIS 最后阶段报 `spawn wine ENOENT`，因此本轮没有生成可用 NSIS 安装器；失败残留 `out/AionUi-2.2.2-win-x64.exe` 仅约 216 KB，不得发布。已生成完整便携包：
 

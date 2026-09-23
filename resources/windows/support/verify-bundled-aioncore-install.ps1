@@ -10,49 +10,22 @@ param(
   [string]$LogPath
 )
 
-$ErrorActionPreference = 'Stop'
-
-function Convert-JsonValueCompat {
-  param([object]$Value)
-  if ($Value -is [System.Collections.IDictionary]) {
-    $properties = @{}
-    foreach ($key in $Value.Keys) {
-      $properties[[string]$key] = Convert-JsonValueCompat $Value[$key]
-    }
-    return New-Object PSObject -Property $properties
-  }
-  if (($Value -is [System.Collections.IList]) -and -not ($Value -is [string])) {
-    $items = @()
-    foreach ($item in $Value) {
-      $items += ,(Convert-JsonValueCompat $item)
-    }
-    return $items
-  }
-  return $Value
-}
-
-function Parse-JsonCompat {
-  param([string]$Text)
-  # Windows 7 commonly ships PowerShell 2.0, which has no built-in JSON cmdlet.
-  # JavaScriptSerializer is available in the .NET runtime shipped with Win7.
-  Add-Type -AssemblyName System.Web.Extensions
-  $serializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
-  return Convert-JsonValueCompat ($serializer.DeserializeObject($Text))
-}
-
-function Escape-JsonString {
-  param([string]$Text)
-  if ($null -eq $Text) { return '' }
-  return $Text.Replace('\', '\\').Replace('"', '\"').Replace("`r", '\r').Replace("`n", '\n')
-}
+$ErrorActionPreference = 'SilentlyContinue'
 
 function Write-VerifyLog {
   param([string]$Message)
-  $line = '{"schemaVersion":1,"ts":"' + (Escape-JsonString (Get-Date -Format o)) +
-    '","session":"","version":"","arch":"' + (Escape-JsonString $RuntimeKey) +
-    '","updated":false,"instDir":"' + (Escape-JsonString $InstallDir) +
-    '","event":"verify-bundled-aioncore","message":"' + (Escape-JsonString $Message) + '"}'
-  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value $line
+  $payload = [ordered]@{
+    schemaVersion = 1
+    ts = (Get-Date -Format o)
+    session = ''
+    version = ''
+    arch = $RuntimeKey
+    updated = $false
+    instDir = $InstallDir
+    event = 'verify-bundled-aioncore'
+    message = $Message
+  }
+  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ($payload | ConvertTo-Json -Compress -Depth 8)
 }
 
 function ConvertTo-RelativeResourcePath {
@@ -73,7 +46,7 @@ function New-Failure {
     [string]$Reason
   )
 
-  @{
+  [PSCustomObject]@{
     category  = $Category
     component = $Component
     version   = $Version
@@ -130,7 +103,7 @@ function Test-Directory {
 function Read-JsonFile {
   param([string]$Path)
   try {
-    return Parse-JsonCompat ([System.IO.File]::ReadAllText($Path))
+    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
   } catch {
     return $null
   }
@@ -254,17 +227,6 @@ function Test-ManagedNodeContract {
 
   $nodeRoot = Join-ContractPath $ManagedRoot $Node.root
   Test-NonEmptyFile $Failures 'node' $Node.version (Join-ContractPath $nodeRoot $Node.executable) $true $nodeRoot | Out-Null
-
-  # npm/npx are part of the managed Node contract.  Checking only node.exe
-  # lets a truncated install pass verification even though MCP startup later
-  # fails when it invokes the real npm CLI.
-  if ($RuntimeKey.StartsWith('win32-')) {
-    $npmBinRoot = Join-ContractPath $nodeRoot 'node_modules/npm/bin'
-  } else {
-    $npmBinRoot = Join-ContractPath $nodeRoot 'lib/node_modules/npm/bin'
-  }
-  Test-NonEmptyFile $Failures 'managed-node' $Node.version (Join-Path $npmBinRoot 'npm-cli.js') $false $nodeRoot | Out-Null
-  Test-NonEmptyFile $Failures 'managed-node' $Node.version (Join-Path $npmBinRoot 'npx-cli.js') $false $nodeRoot | Out-Null
 }
 
 function Test-ManagedCliContract {
@@ -374,7 +336,7 @@ function Test-ManagedResourcesContract {
 }
 
 function Test-BundledResourcesOnce {
-  $failures = New-Object 'System.Collections.Generic.List[object]'
+  $failures = [System.Collections.Generic.List[object]]::new()
   $runtimeParts = $RuntimeKey.Split('-', 2)
   $expectedPlatform = $runtimeParts[0]
   $expectedArch = $runtimeParts[1]
@@ -410,22 +372,17 @@ function Test-BundledResourcesOnce {
   return $failures
 }
 
-# AionCore's managed runtime is large (Node + npm can exceed 200 MB).  On
-# Win7, antivirus/indexing and slow disks can leave files landing well after
-# NSIS returns from extraction.  Keep retrying for up to two minutes instead
-# of failing after the old five-second window.
-$maxAttempts = 120
-for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+for ($attempt = 1; $attempt -le 5; $attempt++) {
   $failures = @(Test-BundledResourcesOnce)
   if ($failures.Count -eq 0) {
     Write-VerifyLog "verify-bundled-aioncore result=ok runtime=$RuntimeKey attempts=$attempt"
     exit 0
   }
 
-  $summary = ($failures | ForEach-Object { $_.component + ':' + $_.reason + ':' + $_.path }) -join ';'
-  if ($attempt -lt $maxAttempts) {
+  $summary = ($failures | ConvertTo-Json -Compress -Depth 5)
+  if ($attempt -lt 5) {
     Write-VerifyLog "verify-bundled-aioncore result=retry classification=resource_pending_landing runtime=$RuntimeKey attempt=$attempt failures=$summary"
-    Start-Sleep -Milliseconds 1000
+    Start-Sleep -Milliseconds 500
   } else {
     Write-VerifyLog "verify-bundled-aioncore result=fail runtime=$RuntimeKey failures=$summary"
   }

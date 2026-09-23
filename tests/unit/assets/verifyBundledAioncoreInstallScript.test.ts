@@ -32,11 +32,11 @@ describe('Windows bundled aioncore install verifier', () => {
     expect(script).toContain('result=fail runtime=$RuntimeKey failures=$summary');
   });
 
-  it('keeps retrying while large Win7 resources finish landing', () => {
-    expect(script).toContain('$maxAttempts = 120');
-    expect(script).toContain('if ($attempt -lt $maxAttempts)');
-    expect(script).toContain("Join-Path $npmBinRoot 'npm-cli.js'");
-    expect(script).toContain("Join-Path $npmBinRoot 'npx-cli.js'");
+  it('keeps the original bounded retry behavior used by the working installer', () => {
+    expect(script).toContain('for ($attempt = 1; $attempt -le 5; $attempt++)');
+    expect(script).toContain('if ($attempt -lt 5)');
+    expect(script).not.toContain("Join-Path $npmBinRoot 'npm-cli.js'");
+    expect(script).not.toContain("Join-Path $npmBinRoot 'npx-cli.js'");
   });
 
   it('requires numeric schemaVersion without PowerShell string coercion', () => {
@@ -44,13 +44,13 @@ describe('Windows bundled aioncore install verifier', () => {
     expect(script).not.toContain('if ($contract.schemaVersion -ne 2)');
   });
 
-  it('keeps the installer verifier compatible with Windows 7 PowerShell 2.0', () => {
-    expect(script).toContain('JavaScriptSerializer');
-    expect(script).toContain('[System.IO.File]::ReadAllText');
-    expect(script).not.toContain('ConvertFrom-Json');
-    expect(script).not.toContain('ConvertTo-Json');
-    expect(script).not.toContain('[ordered]');
-    expect(script).not.toContain('::new()');
+  it('preserves the proven PowerShell implementation used by the original installer', () => {
+    expect(script).toContain('ConvertFrom-Json');
+    expect(script).toContain('ConvertTo-Json');
+    expect(script).toContain('[ordered]');
+    expect(script).toContain('::new()');
+    expect(script).not.toContain('JavaScriptSerializer');
+    expect(script).not.toContain('[System.IO.File]::ReadAllText');
   });
 
   const runOnWindows = process.platform === 'win32' ? it : it.skip;
