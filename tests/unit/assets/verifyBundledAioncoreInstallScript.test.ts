@@ -30,13 +30,13 @@ describe('Windows bundled aioncore install verifier', () => {
     expect(script).toContain('unsupported_schema_version');
     expect(script).toContain('invalid_schema');
     expect(script).toContain('result=fail runtime=$RuntimeKey failures=$summary');
-    expect(script).toContain('Write-Output "verify-bundled-aioncore result=fail runtime=$RuntimeKey failures=$summary"');
+    expect(script).toContain('Write-Output "verify-bundled-aioncore result=fail runtime=$RuntimeKey failures=$summary log=$VerifierLogPath"');
   });
 
   it('captures nsExec output without confusing it with the exit code', () => {
     const nsis = readFileSync('resources/windows/installer-update-verify.nsh', 'utf8');
     const invocation = nsis.slice(nsis.indexOf('nsExec::ExecToStack `"$SYSDIR\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\\verify-bundled-aioncore-install.ps1"'));
-    expect(invocation.indexOf('Pop $AionUiVerifyResourceOutput')).toBeLessThan(invocation.indexOf('Pop $AionUiVerifyResourceResult'));
+    expect(invocation.indexOf('Pop $AionUiVerifyResourceResult')).toBeLessThan(invocation.indexOf('Pop $AionUiVerifyResourceOutput'));
   });
 
   it('keeps the original bounded retry behavior used by the working installer', () => {

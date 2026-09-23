@@ -12,6 +12,11 @@ param(
 
 $ErrorActionPreference = 'SilentlyContinue'
 
+$VerifierLogPath = $LogPath
+if (-not $VerifierLogPath) {
+  $VerifierLogPath = Join-Path $env:TEMP ('aionui-verify-' + $RuntimeKey + '.log')
+}
+
 function Write-VerifyLog {
   param([string]$Message)
   $payload = [ordered]@{
@@ -25,7 +30,11 @@ function Write-VerifyLog {
     event = 'verify-bundled-aioncore'
     message = $Message
   }
-  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ($payload | ConvertTo-Json -Compress -Depth 8)
+  try {
+    Add-Content -LiteralPath $VerifierLogPath -Encoding UTF8 -Value ($payload | ConvertTo-Json -Compress -Depth 8)
+  } catch {
+    Write-Output ('verify-bundled-aioncore log-write-failed path=' + $VerifierLogPath + ' error=' + $_.Exception.Message)
+  }
 }
 
 function ConvertTo-RelativeResourcePath {
@@ -386,7 +395,7 @@ for ($attempt = 1; $attempt -le 5; $attempt++) {
     Start-Sleep -Milliseconds 500
   } else {
     Write-VerifyLog "verify-bundled-aioncore result=fail runtime=$RuntimeKey failures=$summary"
-    Write-Output "verify-bundled-aioncore result=fail runtime=$RuntimeKey failures=$summary"
+    Write-Output "verify-bundled-aioncore result=fail runtime=$RuntimeKey failures=$summary log=$VerifierLogPath"
   }
 }
 

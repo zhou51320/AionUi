@@ -186,8 +186,8 @@ Var /GLOBAL AionUiActiveMarkerResult
   InitPluginsDir
   File "/oname=$PLUGINSDIR\verify-bundled-aioncore-install.ps1" "${PROJECT_DIR}\resources\windows\support\verify-bundled-aioncore-install.ps1"
   nsExec::ExecToStack `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-bundled-aioncore-install.ps1" -InstallDir "$INSTDIR" -RuntimeKey "${_RUNTIME_KEY}" -LogPath "$AionUiSessionLogPath"`
-  Pop $AionUiVerifyResourceOutput
   Pop $AionUiVerifyResourceResult
+  Pop $AionUiVerifyResourceOutput
 
   ${If} $AionUiVerifyResourceResult != 0
     !insertmacro AIONUI_LOG_EVENT "event=verify-bundled-aioncore result=fail exitCode=$AionUiVerifyResourceResult output=$AionUiVerifyResourceOutput log=$AionUiSessionLogPath"
