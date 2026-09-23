@@ -32,6 +32,13 @@ describe('Windows bundled aioncore install verifier', () => {
     expect(script).toContain('result=fail runtime=$RuntimeKey failures=$summary');
   });
 
+  it('keeps retrying while large Win7 resources finish landing', () => {
+    expect(script).toContain('$maxAttempts = 120');
+    expect(script).toContain('if ($attempt -lt $maxAttempts)');
+    expect(script).toContain("Join-Path $npmBinRoot 'npm-cli.js'");
+    expect(script).toContain("Join-Path $npmBinRoot 'npx-cli.js'");
+  });
+
   it('requires numeric schemaVersion without PowerShell string coercion', () => {
     expect(script).toContain("Test-NumberField $contract 'schemaVersion'");
     expect(script).not.toContain('if ($contract.schemaVersion -ne 2)');

@@ -227,6 +227,17 @@ function Test-ManagedNodeContract {
 
   $nodeRoot = Join-ContractPath $ManagedRoot $Node.root
   Test-NonEmptyFile $Failures 'node' $Node.version (Join-ContractPath $nodeRoot $Node.executable) $true $nodeRoot | Out-Null
+
+  # npm/npx are part of the managed Node contract.  Checking only node.exe
+  # lets a truncated install pass verification even though MCP startup later
+  # fails when it invokes the real npm CLI.
+  if ($RuntimeKey.StartsWith('win32-')) {
+    $npmBinRoot = Join-ContractPath $nodeRoot 'node_modules/npm/bin'
+  } else {
+    $npmBinRoot = Join-ContractPath $nodeRoot 'lib/node_modules/npm/bin'
+  }
+  Test-NonEmptyFile $Failures 'managed-node' $Node.version (Join-Path $npmBinRoot 'npm-cli.js') $false $nodeRoot | Out-Null
+  Test-NonEmptyFile $Failures 'managed-node' $Node.version (Join-Path $npmBinRoot 'npx-cli.js') $false $nodeRoot | Out-Null
 }
 
 function Test-ManagedCliContract {
@@ -372,7 +383,12 @@ function Test-BundledResourcesOnce {
   return $failures
 }
 
-for ($attempt = 1; $attempt -le 30; $attempt++) {
+# AionCore's managed runtime is large (Node + npm can exceed 200 MB).  On
+# Win7, antivirus/indexing and slow disks can leave files landing well after
+# NSIS returns from extraction.  Keep retrying for up to two minutes instead
+# of failing after the old five-second window.
+$maxAttempts = 120
+for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
   $failures = @(Test-BundledResourcesOnce)
   if ($failures.Count -eq 0) {
     Write-VerifyLog "verify-bundled-aioncore result=ok runtime=$RuntimeKey attempts=$attempt"
@@ -380,7 +396,7 @@ for ($attempt = 1; $attempt -le 30; $attempt++) {
   }
 
   $summary = ($failures | ConvertTo-Json -Compress -Depth 5)
-  if ($attempt -lt 5) {
+  if ($attempt -lt $maxAttempts) {
     Write-VerifyLog "verify-bundled-aioncore result=retry classification=resource_pending_landing runtime=$RuntimeKey attempt=$attempt failures=$summary"
     Start-Sleep -Milliseconds 1000
   } else {
