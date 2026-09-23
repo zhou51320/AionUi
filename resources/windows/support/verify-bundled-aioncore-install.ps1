@@ -376,6 +376,7 @@ for ($attempt = 1; $attempt -le 5; $attempt++) {
   $failures = @(Test-BundledResourcesOnce)
   if ($failures.Count -eq 0) {
     Write-VerifyLog "verify-bundled-aioncore result=ok runtime=$RuntimeKey attempts=$attempt"
+    Write-Output "verify-bundled-aioncore result=ok runtime=$RuntimeKey attempts=$attempt"
     exit 0
   }
 
@@ -385,6 +386,7 @@ for ($attempt = 1; $attempt -le 5; $attempt++) {
     Start-Sleep -Milliseconds 500
   } else {
     Write-VerifyLog "verify-bundled-aioncore result=fail runtime=$RuntimeKey failures=$summary"
+    Write-Output "verify-bundled-aioncore result=fail runtime=$RuntimeKey failures=$summary"
   }
 }
 

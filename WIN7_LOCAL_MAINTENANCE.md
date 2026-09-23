@@ -154,6 +154,8 @@ Win7 Action 构建会在 `node scripts/build-with-builder.js x64 --win --x64 --w
 
 对照用户提供的原版 `verify-bundled-aioncore-install.ps1`，确认此前新增的 PowerShell 2 JSON 兼容层、npm/npx 强制检查、`120` 次等待和 `ErrorActionPreference = Stop` 并非原版行为，可能在 Win7 上造成误判并触发 E1030。本轮恢复原版校验实现及其 5 次重试策略，移除这些新增阻断条件；聚焦测试 21 项通过（Windows 专属 PowerShell 执行测试在 Linux 跳过）。
 
+随后确认 E1030 的直接原因是 `nsExec::ExecToStack` 弹栈顺序错误：校验脚本的标准输出被误当作退出码，导致脚本实际返回 0 时仍被 NSIS 判定为失败。现已修正为先读取输出、再读取退出码，并将输出、退出码和日志路径写入 E1030 诊断及安装日志。
+
 本机 Linux 无 Wine，electron-builder 在 NSIS 最后阶段报 `spawn wine ENOENT`，因此本轮没有生成可用 NSIS 安装器；失败残留 `out/AionUi-2.2.2-win-x64.exe` 仅约 216 KB，不得发布。已生成完整便携包：
 
 - `out/AionUi-2.2.2-win-x64-portable-fixed.zip`
