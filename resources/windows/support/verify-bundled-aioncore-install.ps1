@@ -10,22 +10,30 @@ param(
   [string]$LogPath
 )
 
-$ErrorActionPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'Stop'
+
+function Parse-JsonCompat {
+  param([string]$Text)
+  # Windows 7 commonly ships PowerShell 2.0, which has no built-in JSON cmdlet.
+  # JavaScriptSerializer is available in the .NET runtime shipped with Win7.
+  Add-Type -AssemblyName System.Web.Extensions
+  $serializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+  return $serializer.DeserializeObject($Text)
+}
+
+function Escape-JsonString {
+  param([string]$Text)
+  if ($null -eq $Text) { return '' }
+  return $Text.Replace('\', '\\').Replace('"', '\"').Replace("`r", '\r').Replace("`n", '\n')
+}
 
 function Write-VerifyLog {
   param([string]$Message)
-  $payload = [ordered]@{
-    schemaVersion = 1
-    ts = (Get-Date -Format o)
-    session = ''
-    version = ''
-    arch = $RuntimeKey
-    updated = $false
-    instDir = $InstallDir
-    event = 'verify-bundled-aioncore'
-    message = $Message
-  }
-  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value ($payload | ConvertTo-Json -Compress -Depth 8)
+  $line = '{"schemaVersion":1,"ts":"' + (Escape-JsonString (Get-Date -Format o)) +
+    '","session":"","version":"","arch":"' + (Escape-JsonString $RuntimeKey) +
+    '","updated":false,"instDir":"' + (Escape-JsonString $InstallDir) +
+    '","event":"verify-bundled-aioncore","message":"' + (Escape-JsonString $Message) + '"}'
+  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value $line
 }
 
 function ConvertTo-RelativeResourcePath {
@@ -46,7 +54,7 @@ function New-Failure {
     [string]$Reason
   )
 
-  [PSCustomObject]@{
+  @{
     category  = $Category
     component = $Component
     version   = $Version
@@ -103,7 +111,7 @@ function Test-Directory {
 function Read-JsonFile {
   param([string]$Path)
   try {
-    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    return Parse-JsonCompat ([System.IO.File]::ReadAllText($Path))
   } catch {
     return $null
   }
@@ -347,7 +355,7 @@ function Test-ManagedResourcesContract {
 }
 
 function Test-BundledResourcesOnce {
-  $failures = [System.Collections.Generic.List[object]]::new()
+  $failures = New-Object 'System.Collections.Generic.List[object]'
   $runtimeParts = $RuntimeKey.Split('-', 2)
   $expectedPlatform = $runtimeParts[0]
   $expectedArch = $runtimeParts[1]
@@ -395,7 +403,7 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     exit 0
   }
 
-  $summary = ($failures | ConvertTo-Json -Compress -Depth 5)
+  $summary = ($failures | ForEach-Object { $_.component + ':' + $_.reason + ':' + $_.path }) -join ';'
   if ($attempt -lt $maxAttempts) {
     Write-VerifyLog "verify-bundled-aioncore result=retry classification=resource_pending_landing runtime=$RuntimeKey attempt=$attempt failures=$summary"
     Start-Sleep -Milliseconds 1000

@@ -44,6 +44,15 @@ describe('Windows bundled aioncore install verifier', () => {
     expect(script).not.toContain('if ($contract.schemaVersion -ne 2)');
   });
 
+  it('keeps the installer verifier compatible with Windows 7 PowerShell 2.0', () => {
+    expect(script).toContain('JavaScriptSerializer');
+    expect(script).toContain('[System.IO.File]::ReadAllText');
+    expect(script).not.toContain('ConvertFrom-Json');
+    expect(script).not.toContain('ConvertTo-Json');
+    expect(script).not.toContain('[ordered]');
+    expect(script).not.toContain('::new()');
+  });
+
   const runOnWindows = process.platform === 'win32' ? it : it.skip;
 
   runOnWindows('fails an old-version-only Codex CLI install directory', () => {
