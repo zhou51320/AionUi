@@ -4,7 +4,6 @@
 Var /GLOBAL AionUiUninstallHadErrors
 Var /GLOBAL AionUiUninstallLogResult
 Var /GLOBAL AionUiVerifyResourceResult
-Var /GLOBAL AionUiVerifyResourceOutput
 Var /GLOBAL AionUiUpdatedAppExitWaitResult
 Var /GLOBAL AionUiActiveMarkerExecResult
 Var /GLOBAL AionUiActiveMarkerResult
@@ -132,7 +131,6 @@ Var /GLOBAL AionUiActiveMarkerResult
     StrCpy $AionUiUninstallHadErrors "0"
     StrCpy $AionUiUninstallLogResult ""
     StrCpy $AionUiVerifyResourceResult ""
-    StrCpy $AionUiVerifyResourceOutput ""
     StrCpy $AionUiUpdatedAppExitWaitResult ""
     StrCpy $AionUiActiveMarkerExecResult ""
     StrCpy $AionUiActiveMarkerResult ""
@@ -185,21 +183,19 @@ Var /GLOBAL AionUiActiveMarkerResult
 !macro AIONUI_VERIFY_BUNDLED_AIONCORE_RESOURCES _RUNTIME_KEY
   InitPluginsDir
   File "/oname=$PLUGINSDIR\verify-bundled-aioncore-install.ps1" "${PROJECT_DIR}\resources\windows\support\verify-bundled-aioncore-install.ps1"
-  nsExec::ExecToStack `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-bundled-aioncore-install.ps1" -InstallDir "$INSTDIR" -RuntimeKey "${_RUNTIME_KEY}" -LogPath "$AionUiSessionLogPath"`
+  nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-bundled-aioncore-install.ps1" -InstallDir "$INSTDIR" -RuntimeKey "${_RUNTIME_KEY}" -LogPath "$AionUiSessionLogPath"`
   Pop $AionUiVerifyResourceResult
-  Pop $AionUiVerifyResourceOutput
 
   ${If} $AionUiVerifyResourceResult != 0
-    !insertmacro AIONUI_LOG_EVENT "event=verify-bundled-aioncore result=fail exitCode=$AionUiVerifyResourceResult output=$AionUiVerifyResourceOutput log=$AionUiSessionLogPath"
     !insertmacro AIONUI_FAIL_UX \
       "${AIONUI_E_BUNDLED_AIONCORE_INCOMPLETE}" \
-      "event=session-end result=fail code=${AIONUI_E_BUNDLED_AIONCORE_INCOMPLETE} detail=bundled-aioncore-incomplete runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult output=$AionUiVerifyResourceOutput log=$AionUiSessionLogPath" \
+      "event=session-end result=fail code=${AIONUI_E_BUNDLED_AIONCORE_INCOMPLETE} detail=bundled-aioncore-incomplete runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult" \
       "${AIONUI_MSG_BUNDLED_AIONCORE_INCOMPLETE_ZH}" \
       "${AIONUI_MSG_BUNDLED_AIONCORE_INCOMPLETE_EN}" \
       "${AIONUI_MSG_BUNDLED_AIONCORE_INCOMPLETE_ACTION_ZH}" \
       "${AIONUI_MSG_BUNDLED_AIONCORE_INCOMPLETE_ACTION_EN}" \
-      "bundled-aioncore-incomplete runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult output=$AionUiVerifyResourceOutput instDir=$INSTDIR log=$AionUiSessionLogPath" \
-      "bundled-aioncore-incomplete runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult output=$AionUiVerifyResourceOutput instDir=$INSTDIR log=$AionUiSessionLogPath"
+      "bundled-aioncore-incomplete runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult instDir=$INSTDIR log=$AionUiSessionLogPath" \
+      "bundled-aioncore-incomplete runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult instDir=$INSTDIR log=$AionUiSessionLogPath"
   ${EndIf}
 !macroend
 
