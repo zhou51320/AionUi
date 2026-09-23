@@ -12,13 +12,32 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Convert-JsonValueCompat {
+  param([object]$Value)
+  if ($Value -is [System.Collections.IDictionary]) {
+    $properties = @{}
+    foreach ($key in $Value.Keys) {
+      $properties[[string]$key] = Convert-JsonValueCompat $Value[$key]
+    }
+    return New-Object PSObject -Property $properties
+  }
+  if (($Value -is [System.Collections.IList]) -and -not ($Value -is [string])) {
+    $items = @()
+    foreach ($item in $Value) {
+      $items += ,(Convert-JsonValueCompat $item)
+    }
+    return $items
+  }
+  return $Value
+}
+
 function Parse-JsonCompat {
   param([string]$Text)
   # Windows 7 commonly ships PowerShell 2.0, which has no built-in JSON cmdlet.
   # JavaScriptSerializer is available in the .NET runtime shipped with Win7.
   Add-Type -AssemblyName System.Web.Extensions
   $serializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
-  return $serializer.DeserializeObject($Text)
+  return Convert-JsonValueCompat ($serializer.DeserializeObject($Text))
 }
 
 function Escape-JsonString {
