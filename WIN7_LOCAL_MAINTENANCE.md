@@ -245,6 +245,15 @@ DOTNET_SYSTEM_GLOBALIZATION_USENLS=1
 
 ## 2026-09 回归修复记录
 
+### 官方 Skill 注入链路恢复与 Win7 打包
+
+- 移除本地新增的 `aionui-skill-runtime`、`/api/runtime/skills` 及 `aioncore skills list/show/cat`；技能加载恢复使用官方 `/api/skills` 与 `[LOAD_SKILL: <name>]` 注入协议。
+- 该改动提交：`052c9c92b298143b1ee13db643a8c28ed78dcf87`。
+- Win7 Action：`35974788586`（job `107552627928`）成功完成，生成 NSIS 安装包。
+- 产物：`AionUi-2.2.2-win-x64-action35974788586.exe`。
+- SHA-256：`733244dcd92899e3db5d44359b919183b37aac361c1adf8164a29967102dc288`。
+- Action 同时完成离线 PDF runtime 准备；安装包应包含 `resources/pdf-runtime` 与 `resources/bundled-aioncore`。
+
 - `AionCore/crates/aionui-office/src/watch_manager.rs`：只给 officecli 子进程注入 ICU invariant 与 NLS 环境变量。
 - `resources/officecli.runtimeconfig.json`：开启 `System.Globalization.Invariant`，避免直接启动内置 officecli 时加载 ICU。
 - `AionCore/crates/aionui-app/assets/builtin-skills/auto-inject/officecli/SKILL.md`：增加 PowerShell 自动路径解析，不再要求用户手动配置。
