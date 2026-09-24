@@ -140,6 +140,11 @@ Var /GLOBAL AionUiActiveMarkerResult
   !else
     !insertmacro AIONUI_RELEASE_INSTALL_DIR_OUTDIR
     !insertmacro AIONUI_SESSION_BEGIN
+    ; PowerShell verifier writes to this path. Keep a writable fallback when
+    ; no --installer-log parameter was supplied or session initialization failed.
+    ${If} $AionUiSessionLogPath == ""
+      StrCpy $AionUiSessionLogPath "$TEMP\${AIONUI_FALLBACK_LOG}"
+    ${EndIf}
     !insertmacro AIONUI_SLOG "event=installer-outdir-release outDir=$AionUiCurrentOutDir instDir=$INSTDIR"
     ; Guard target/machine architecture as early as possible: this runs before customInit's
     ; registry heal/clear/repair, so a wrong-arch installer aborts without mutating an existing

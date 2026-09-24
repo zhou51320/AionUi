@@ -32,6 +32,14 @@ describe('Windows bundled aioncore install verifier', () => {
     expect(script).toContain('result=fail runtime=$RuntimeKey failures=$summary');
   });
 
+  it('provides a writable fallback log path before running the verifier', () => {
+    const nsis = readFileSync('resources/windows/installer-update-verify.nsh', 'utf8');
+    const sessionStart = nsis.indexOf('!insertmacro AIONUI_SESSION_BEGIN');
+    const verifier = nsis.indexOf('!macro AIONUI_VERIFY_BUNDLED_AIONCORE_RESOURCES');
+    const block = nsis.slice(sessionStart, verifier);
+    expect(block).toContain('StrCpy $AionUiSessionLogPath "$TEMP\\${AIONUI_FALLBACK_LOG}"');
+  });
+
   it('keeps the original bounded retry behavior used by the working installer', () => {
     expect(script).toContain('for ($attempt = 1; $attempt -le 5; $attempt++)');
     expect(script).toContain('if ($attempt -lt 5)');
