@@ -7,10 +7,8 @@ use super::{SkillDefinition, SkillIndex};
 /// description intact (the well-behaved builtins sit at 133-142) and cuts only
 /// the genuinely oversized ones.
 ///
-/// Truncating is safe only BECAUSE channel A exists: an agent that sees a cut
-/// description and suspects the skill is relevant can fetch the full text with
-/// `skills show`. Without that escape hatch, truncation would degrade the
-/// agent's ability to decide when a skill applies.
+/// Descriptions are intentionally bounded so the injected index remains small;
+/// the `[LOAD_SKILL]` protocol provides the full skill body on demand.
 const DESCRIPTION_CHAR_BUDGET: usize = 200;
 
 fn truncate_description(description: &str) -> String {
@@ -26,12 +24,9 @@ fn truncate_description(description: &str) -> String {
 
 /// Build the skills index block injected for `injected`-mode agents.
 ///
-/// Two channels are offered and the AGENT chooses. We deliberately do not try to
-/// predict whether it can execute commands: permission mode (plan / read-only)
-/// is agent-side runtime state that no CLI capability query exposes. Channel B
-/// requires no vendor capability at all, which is what makes it a true fallback,
-/// and channel A is listed first because it is a normal tool call rather than
-/// text-matching plus an extra turn.
+/// Skills are advertised through the official `[LOAD_SKILL]` protocol. The
+/// backend materializes the selected skill directory for the agent; no second
+/// runtime CLI or HTTP contract is needed.
 pub fn build_skills_index_text(skills: &[SkillIndex]) -> String {
     if skills.is_empty() {
         return String::new();
@@ -55,24 +50,6 @@ pub fn build_skills_index_text(skills: &[SkillIndex]) -> String {
         ));
     }
     lines.push(String::new());
-    // These command lines are the CONTRACT, not prose: both subcommands read their
-    // arguments as a JSON object on STDIN and reject positional arguments outright
-    // (`aionui-app/src/cli.rs` declares them as argument-less variants). An earlier
-    // wording taught `skills show <name>`, which cost live agents three to five
-    // failed tool calls each before they guessed the real shape -- and `--help` did
-    // not mention stdin either, so the obvious self-service path was a dead end.
-    // `skills_cli_commands_in_the_index_are_parseable` in `aionui-app` pins the two
-    // sides together so they cannot drift apart again.
-    lines.push(
-        "To get a skill's full content, prefer running \
-         `printf '%s' '{\"name\":\"<name>\"}' | \"$AIONUI_HELPER_BIN\" skills show` — it also \
-         returns the skill's absolute directory, and \
-         `printf '%s' '{\"path\":\"<name>/<relative-path>\"}' | \"$AIONUI_HELPER_BIN\" skills cat` \
-         reads its supplementary files. Both read their arguments as a JSON object on stdin and \
-         take no positional arguments; run `\"$AIONUI_HELPER_BIN\" skills capabilities` for the \
-         full contract."
-            .to_string(),
-    );
     lines.push(
         "If you cannot execute commands, output `[LOAD_SKILL: <name>]` in your response instead \
          and the content will be provided on the next turn."
@@ -244,20 +221,14 @@ mod tests {
         assert!(!text.contains('…'), "200 is within budget, not over it");
     }
 
-    /// Truncation is only SAFE because channel A exists, so the block must
-    /// advertise both channels -- with the command first, since it is a normal
-    /// tool call rather than text-matching plus an extra turn.
+    /// The official protocol is the only skill loading channel advertised to agents.
     #[test]
-    fn the_index_block_advertises_both_channels_with_the_command_first() {
+    fn the_index_block_advertises_the_official_load_protocol() {
         let text = build_skills_index_text(&[SkillIndex {
             name: "cron".into(),
             description: "d".into(),
         }]);
-        let command_at = text.find("skills show").expect("channel A must be advertised");
-        let protocol_at = text.find("[LOAD_SKILL:").expect("channel B must stay as the fallback");
-        assert!(command_at < protocol_at, "channel A is the preferred path");
-        assert!(text.contains("$AIONUI_HELPER_BIN"));
-        assert!(text.contains("skills cat"), "supplementary files need their own hint");
+        assert!(text.contains("[LOAD_SKILL: <name>]"));
     }
 
     /// Discovery upstream returns from a HashMap, so an unsorted block would vary
@@ -387,13 +358,7 @@ mod tests {
         assert!(result.starts_with("Base prompt"));
         assert!(result.contains("## Available Skills"));
         assert!(result.contains("- **helper**: A helper skill"));
-        // The placeholder text changed from `skill-name` to `<name>` when the
-        // block gained its second channel. Asserting the PROTOCOL MARKER instead
-        // of the exact placeholder keeps the meaningful part of the check --
-        // that this builder still carries a load instruction -- without pinning
-        // wording that channel A's arrival legitimately rewrote.
-        assert!(result.contains("[LOAD_SKILL:"));
-        assert!(result.contains("skills show"), "both channels travel with the index");
+        assert!(result.contains("[LOAD_SKILL: <name>]"));
     }
 
     #[test]

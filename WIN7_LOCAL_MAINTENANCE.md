@@ -152,15 +152,14 @@ Win7 Action 构建会在 `node scripts/build-with-builder.js x64 --win --x64 --w
 将该目录放入最终 ZIP；便携包验收时应检查 `resources/pdf-runtime/python.exe`、五个 Python 包（含
 `typing_extensions`）、`poppler/pdftoppm.exe` 和 manifest 哈希均存在。
 
-### Skill 工具接口契约
+### 官方技能注入链路
 
-Skill 快捷工具报 `Skill 'pdf' not found` 且 `Available skills:` 为空时，先区分工具层和
-AionCore runtime：`aioncore skills list` 走 `/api/runtime/skills`，成功响应是
-`{ success: true, data: { skills: [...] } }`；普通 `GET /api/skills` 是桌面技能目录接口，
-成功响应是 `{ success: true, data: [...] }`。两种结构都属于仓库内的既有契约，不能为了适配
-外部工具而把 `/api/skills` 改成对象，否则会破坏桌面 UI 和既有测试。外部 Skill parser 应
-调用 `/api/runtime/skills`，或同时兼容 `data.skills` 与 `data` 为数组；当前仓库未包含该
-外部 parser，因此这里只记录契约和排查结论。
+本地分支曾额外加入 `aionui-skill-runtime`、`aioncore skills` 和 `/api/runtime/skills`，
+但这些并非官方上游技能注入所需，也会引入第二套数据契约。现已移除，恢复官方技能注入链路：
+会话根据已启用技能建立 view/注入上下文，并使用 `[LOAD_SKILL: <name>]` 协议按需加载完整内容。
+原有桌面管理接口 `GET /api/skills` 保持官方格式 `{ success: true, data: [...] }`，不再与额外的
+`data.skills` runtime 契约并存。技能脚本所需的 Node、npm、npx、Python 等环境变量注入属于
+独立的子进程运行时机制，与技能内容加载无关。
 
 ## 验证清单
 

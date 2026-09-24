@@ -138,21 +138,6 @@ fn data() -> Value {
                     "refuses_team_callers": true
                 }
             },
-            {
-                "name": "skills",
-                "mode": "read-only",
-                "description": "Read the skills enabled in THIS conversation: list them, get a skill's full body plus its absolute directory, and read its supplementary files.",
-                "contract": "agent-facing-skills-cli",
-                "contract_command": "skills capabilities",
-                "invocation": "aioncore skills capabilities",
-                "runtime_required": ["AIONUI_BASE_URL", "AIONUI_CONVERSATION_ID", "AIONUI_USER_ID", "AIONUI_RUNTIME_TOKEN"],
-                "runtime_free_commands": ["skills capabilities"],
-                "safety": {
-                    "can_write": false,
-                    "read_only": true,
-                    "scoped_to_conversation_snapshot": true
-                }
-            }
         ],
         "non_agent_subcommands": [
             {
@@ -207,7 +192,7 @@ mod tests {
     use crate::cli::Cli;
     use crate::commands::{
         config_capabilities, conversation_capabilities, diagnose_capabilities, session_capabilities,
-        skills_capabilities, team_capabilities,
+        team_capabilities,
     };
 
     /// `capabilities` is its own entrypoint — `data()` declares it under
@@ -290,8 +275,7 @@ mod tests {
             ("team", team_capabilities::data()),
             ("session", session_capabilities::data()),
             ("conversation", conversation_capabilities::data()),
-            ("skills", skills_capabilities::data()),
-        ] {
+            ] {
             let entry = domains
                 .iter()
                 .find(|domain| domain["name"] == json!(name))

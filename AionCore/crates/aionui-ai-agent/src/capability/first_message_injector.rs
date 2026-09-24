@@ -152,10 +152,9 @@ mod tests {
         );
     }
 
-    /// The `injected` block must advertise both channels — this is the wiring
-    /// half of the truncation-is-safe argument.
+    /// The injected block must advertise the official skill loading protocol.
     #[tokio::test]
-    async fn injected_mode_carries_the_dual_channel_instructions() {
+    async fn injected_mode_carries_the_load_skill_instruction() {
         let tmp = TempDir::new().unwrap();
         skill_corpus(tmp.path());
         let _guard = EmptyBuiltinGuard::new(tmp.path());
@@ -173,7 +172,6 @@ mod tests {
         )
         .await;
         assert!(out.contains("Available Skills"));
-        assert!(out.contains("skills show"));
         assert!(out.contains("[LOAD_SKILL:"));
     }
 

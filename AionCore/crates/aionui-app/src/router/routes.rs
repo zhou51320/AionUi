@@ -47,7 +47,6 @@ use crate::services::AppServices;
 use super::fs_monitor::spawn_fs_monitor;
 use super::health::health_check;
 use aionui_session_message::{session_message_routes, session_message_user_routes};
-use aionui_skill_runtime::skill_runtime_routes;
 
 use super::runtime_team_tools::{RuntimeTeamToolsState, runtime_team_tools_routes};
 use super::scm_monitor::{CompositeMessageRouter, spawn_scm_monitor};
@@ -377,9 +376,6 @@ pub fn create_router_with_all_state(services: &AppServices, states: ModuleStates
         service: services.conversation_service.clone(),
         runtime_token_service: services.runtime_token_service.clone(),
     });
-    // Channel A. Same runtime-token self-authentication: the caller is an agent
-    // process holding a conversation-scoped token, not a browser session.
-    let skill_runtime = skill_runtime_routes(states.skill_runtime);
     // The `@@` picker's outlet goes through ordinary user auth.
     let session_message_authenticated = session_message_user_routes(states.session_message)
         .route_layer(from_fn_with_state(auth_mw_state.clone(), auth_middleware));
@@ -412,7 +408,6 @@ pub fn create_router_with_all_state(services: &AppServices, states: ModuleStates
         .merge(extension_authenticated)
         .merge(hub_authenticated)
         .merge(skill_authenticated)
-        .merge(skill_runtime)
         .merge(channel_authenticated)
         .merge(team_authenticated)
         .merge(cron_authenticated)

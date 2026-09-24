@@ -76,8 +76,8 @@ impl AgentType {
     /// ⚠️ RETIRED FROM SKILL DELIVERY. AionUi no longer creates these
     /// directories: skills reach an agent through its own view directory
     /// under the data dir (layer 1) or through prompt injection plus the
-    /// `aioncore skills` / `[LOAD_SKILL]` channels (layer 2). The delivery
-    /// decision is `agent_metadata.skill_delivery`, not this table.
+    /// official `[LOAD_SKILL]` protocol (layer 2). The delivery decision is
+    /// `agent_metadata.skill_delivery`, not this table.
     ///
     /// Kept as historical/reference data — a record of which directory each
     /// non-ACP CLI scans — and asserted by the antigravity migration test to

@@ -1368,12 +1368,8 @@ pub async fn materialize_skills_for_agent_with_repo_for_user(
     Ok(resolved)
 }
 
-/// Strip a `SKILL.md`'s YAML frontmatter, returning just the body.
-///
-/// Lives here rather than in a consumer because BOTH skill-delivery channels
-/// hand a body to the agent -- the `[LOAD_SKILL]` text protocol and the
-/// `aioncore skills show` command -- and the two must return identical content.
-/// A second copy is how they would quietly drift apart.
+/// Strip a `SKILL.md`'s YAML frontmatter, returning just the body used by the
+/// official `[LOAD_SKILL]` delivery protocol.
 ///
 /// Content without a leading `---`, or with an unterminated block, is returned
 /// unchanged: a malformed skill should still deliver something readable.

@@ -6,9 +6,6 @@ use std::sync::Arc;
 
 use aionui_db::ISkillRepository;
 pub use aionui_extension::ResolvedAgentSkill;
-// Frontmatter stripping lives in `aionui-extension` so this channel and the
-// `aioncore skills show` command return byte-identical bodies. A local copy is
-// how the two would quietly drift.
 use aionui_extension::skill_service::extract_skill_body;
 use async_trait::async_trait;
 use tracing::warn;

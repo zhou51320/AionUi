@@ -2362,7 +2362,6 @@ mod tests {
         );
         assert!(merged.contains("## Available Skills"));
         assert!(merged.contains("- **cron**: Schedule stuff"));
-        assert!(merged.contains("skills show"), "channel A first");
         assert!(merged.contains("[LOAD_SKILL:"), "channel B as the fallback");
     }
 
