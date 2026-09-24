@@ -205,6 +205,11 @@ PDF runtime 验收记录：Action `35568895115`（提交 `bfa26f175`）生成并
 ZIP 内 manifest 的 453 个文件哈希全部通过，且包含 Python 3.8.10、四个固定 PDF 包、Poppler、
 officecli、AionCore 和 AionUI `AionUi.exe`。
 
+2026-09-24 Action `35962953436`（提交 `24b8fe3d0`）在修复 `typing_extensions.py` 单文件模块校验后成功生成
+Win7 NSIS 安装器。下载产物 `AionUi-2.2.2-win-x64.exe` 大小 212,023,161 字节，SHA-256 为
+`260c3f3575e3712068ba3b2689e3eaa5059a92a907a19b59d008262553ed901d`；PDF runtime 校验、Win7 PE 检查及
+桌面打包步骤均通过。
+
 ## 相对官方上游的本地改动
 
 以下是需要在后续同步中保留并复核的本地改动；具体代码以当前工作树为准：
