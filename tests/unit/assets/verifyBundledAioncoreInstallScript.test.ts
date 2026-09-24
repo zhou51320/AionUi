@@ -32,6 +32,15 @@ describe('Windows bundled aioncore install verifier', () => {
     expect(script).toContain('result=fail runtime=$RuntimeKey failures=$summary');
   });
 
+  it('does not make a PowerShell verifier warning abort installation', () => {
+    const nsis = readFileSync('resources/windows/installer-update-verify.nsh', 'utf8');
+    const start = nsis.indexOf('!macro AIONUI_VERIFY_BUNDLED_AIONCORE_RESOURCES');
+    const end = nsis.indexOf('!macroend', start);
+    const block = nsis.slice(start, end);
+    expect(block).toContain('result=warning');
+    expect(block).not.toContain('AIONUI_FAIL_UX');
+  });
+
   it('provides a writable fallback log path before running the verifier', () => {
     const nsis = readFileSync('resources/windows/installer-update-verify.nsh', 'utf8');
     const sessionStart = nsis.indexOf('!insertmacro AIONUI_SESSION_BEGIN');

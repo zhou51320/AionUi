@@ -192,15 +192,12 @@ Var /GLOBAL AionUiActiveMarkerResult
   Pop $AionUiVerifyResourceResult
 
   ${If} $AionUiVerifyResourceResult != 0
-    !insertmacro AIONUI_FAIL_UX \
-      "${AIONUI_E_BUNDLED_AIONCORE_INCOMPLETE}" \
-      "event=session-end result=fail code=${AIONUI_E_BUNDLED_AIONCORE_INCOMPLETE} detail=bundled-aioncore-incomplete runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult" \
-      "${AIONUI_MSG_BUNDLED_AIONCORE_INCOMPLETE_ZH}" \
-      "${AIONUI_MSG_BUNDLED_AIONCORE_INCOMPLETE_EN}" \
-      "${AIONUI_MSG_BUNDLED_AIONCORE_INCOMPLETE_ACTION_ZH}" \
-      "${AIONUI_MSG_BUNDLED_AIONCORE_INCOMPLETE_ACTION_EN}" \
-      "bundled-aioncore-incomplete runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult instDir=$INSTDIR log=$AionUiSessionLogPath" \
-      "bundled-aioncore-incomplete runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult instDir=$INSTDIR log=$AionUiSessionLogPath"
+    ; PowerShell verification is diagnostic only. Win7 can return a false
+    ; negative for locked/late-visible files; the app performs the authoritative
+    ; runtime check and can report the exact missing resource after startup.
+    !insertmacro AIONUI_LOG_EVENT "event=verify-bundled-aioncore result=warning runtime=${_RUNTIME_KEY} result=$AionUiVerifyResourceResult instDir=$INSTDIR log=$AionUiSessionLogPath"
+  ${Else}
+    !insertmacro AIONUI_LOG_EVENT "event=verify-bundled-aioncore result=ok runtime=${_RUNTIME_KEY} instDir=$INSTDIR"
   ${EndIf}
 !macroend
 
