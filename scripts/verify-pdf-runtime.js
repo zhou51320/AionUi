@@ -26,11 +26,15 @@ function main() {
   const pythonExe = path.join(TARGET_ROOT, manifest.python.executable || 'python.exe');
   if (!fs.existsSync(pythonExe)) fail('缺少 python.exe');
   const required = ['pypdf', 'reportlab', 'PIL', 'pdf2image', 'typing_extensions'];
+  const sitePackages = path.join(TARGET_ROOT, 'Lib', 'site-packages');
   for (const packageName of required) {
     const candidates = packageName === 'PIL' ? ['PIL', 'Pillow'] : [packageName];
-    if (!candidates.some((name) => fs.existsSync(path.join(TARGET_ROOT, 'Lib', 'site-packages', name)))) {
-      fail(`缺少 Python 包 ${packageName}`);
-    }
+    const installed = candidates.some((name) =>
+      [path.join(sitePackages, name), path.join(sitePackages, `${name}.py`)].some((candidate) =>
+        fs.existsSync(candidate)
+      )
+    );
+    if (!installed) fail(`缺少 Python 包 ${packageName}`);
   }
   const popplerBin = path.join(TARGET_ROOT, manifest.poppler.relativeBin, 'pdftoppm.exe');
   if (!fs.existsSync(popplerBin)) fail(`缺少 Poppler: ${popplerBin}`);

@@ -5,7 +5,7 @@ $checks = @(
   @('python', (Join-Path $RuntimeRoot 'python.exe')),
   @('pdftoppm', (Join-Path (Join-Path $RuntimeRoot 'poppler') 'pdftoppm.exe')),
   @('pypdf', (Join-Path $RuntimeRoot 'Lib\site-packages\pypdf')),
-  @('typing_extensions', (Join-Path $RuntimeRoot 'Lib\site-packages\typing_extensions'))
+  @('typing_extensions', (Join-Path $RuntimeRoot 'Lib\site-packages\typing_extensions.py'))
 )
 $failed = $false
 foreach ($check in $checks) {

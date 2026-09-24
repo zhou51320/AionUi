@@ -23,6 +23,7 @@ describe('Win7 PDF runtime contract', () => {
   it('bundles typing_extensions and does not require Tesseract', () => {
     expect(prepareScript).toContain("typing_extensions: '4.13.2'");
     expect(verifyScript).toContain("'typing_extensions'");
+    expect(verifyScript).toContain('`${name}.py`');
     expect(verifyScript).not.toContain('缺少 Tesseract');
     expect(verifyScript).not.toContain('缺少 OCR 语言包');
   });
