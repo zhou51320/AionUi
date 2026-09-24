@@ -9,7 +9,7 @@ license: Proprietary. LICENSE.txt has complete terms
 ## AionUI Win7 offline runtime
 
 The Windows 7 x64 portable package includes Python **3.8.10**, `pypdf`,
-`reportlab`, `Pillow`, `pdf2image`, and Poppler. Always prefer the paths exposed
+`typing_extensions`, `reportlab`, `Pillow`, `pdf2image`, and Poppler. Always prefer the paths exposed
 by the host application instead of a system Python:
 
 ### Mandatory runtime decision (do this first)
@@ -18,20 +18,18 @@ On AionUI Win7, **do not search for Python, run `pip install`, or probe random
 folders**. The host has already resolved the bundled runtime and injects these
 environment variables into this skill process:
 
-| Variable | Use |
-| --- | --- |
-| `AIONUI_PYTHON` | Absolute path to the bundled `python.exe` (Python 3.8.10) |
-| `AIONUI_PDF_RUNTIME` | Root of the bundled Python/PDF runtime |
-| `AIONUI_PDF_POPPLER` | Directory containing `pdftoppm.exe` and `pdftocairo.exe` |
-| `AIONUI_PYTHON_VERSION` | Bundled version, currently `3.8.10` |
+| Variable                | Use                                                       |
+| ----------------------- | --------------------------------------------------------- |
+| `AIONUI_PYTHON`         | Absolute path to the bundled `python.exe` (Python 3.8.10) |
+| `AIONUI_PDF_RUNTIME`    | Root of the bundled Python/PDF runtime                    |
+| `AIONUI_PDF_POPPLER`    | Directory containing `pdftoppm.exe` and `pdftocairo.exe`  |
+| `AIONUI_PYTHON_VERSION` | Bundled version, currently `3.8.10`                       |
 
 Fixed-path fallback (use this before searching the machine):
 
 - Installed build: `%LOCALAPPDATA%\\Programs\\AionUi\\resources\\pdf-runtime\\win32-x64`
 - Portable build: `<AionUi.exe directory>\\resources\\pdf-runtime\\win32-x64`
 - Python: `<runtime>\\python.exe`; Poppler: `<runtime>\\poppler`
-- Tesseract OCR: `<runtime>\\tesseract\\tesseract.exe`
-- OCR languages: `<runtime>\\tesseract\\tessdata`
 
 Use the variables directly when present; otherwise construct the fixed installed
 or portable path above. Do not scan PATH, search random folders, or run pip.
@@ -39,7 +37,7 @@ If `AIONUI_PYTHON` is set, assume the runtime is available and start the PDF
 operation immediately; only report an offline runtime error when the explicitly
 supplied executable cannot be launched. For normal text extraction use `pypdf`
 and do **not** invoke Poppler. Use Poppler only for scanned/image-only PDFs,
-then run bundled Tesseract with `-l chi_sim+eng` and `--tessdata-dir`.
+then render pages with Poppler and send the resulting PNG files as image attachments to the configured vision model.
 
 ```powershell
 & $env:AIONUI_PYTHON .\scripts\merge_pdfs.py input.pdf output.pdf
@@ -53,10 +51,23 @@ The same variables are injected into every skill and script subprocess:
 automatically. The package is fully offline; do not run `pip install` from a
 skill.
 
-The Win7 PDF runtime bundles Tesseract OCR with `chi_sim` and `eng` language
-data. For image-only PDFs, OCR is required after rendering; do not claim that
-rendering alone extracted text. If the fixed Tesseract path is missing, report
-**offline OCR runtime unavailable** and include the expected path.
+Tesseract is an optional legacy fallback and may be unusable on Win7 when its
+native DLL closure is absent. Do not make Tesseract a prerequisite for PDF
+processing.
+
+For image-only PDFs, first render pages with Poppler and send the PNG files as
+image attachments to the configured vision model. Rendering creates images; it
+does not itself extract text. The model performs OCR and understands tables,
+stamps, and handwriting. Use the helper script below for page ranges, DPI, and
+Windows paths:
+
+```powershell
+& $env:AIONUI_PYTHON .\scripts\pdf_to_png.py input.pdf output_dir --dpi 200 --first-page 1 --last-page 5
+```
+
+On Win7, keep command paths ASCII when possible. If the source PDF has a Chinese
+path, copy it to a temporary ASCII filename before invoking Poppler, then attach
+the generated PNG files to the conversation.
 
 # PDF Processing Guide
 

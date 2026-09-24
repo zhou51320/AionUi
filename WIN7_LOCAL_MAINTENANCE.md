@@ -123,7 +123,7 @@ NODE
 Win7 便携包在构建阶段由 `scripts/prepare-pdf-runtime.js` 下载并校验以下固定组件：
 
 - Python 3.8.10 embeddable x64（最后一代官方支持 Win7 的 Python）；
-- `pypdf 5.9.0`、`reportlab 4.2.5`、`Pillow 10.4.0`、`pdf2image 1.17.0`；
+- `pypdf 5.9.0`、`typing_extensions 4.13.2`、`reportlab 4.2.5`、`Pillow 10.4.0`、`pdf2image 1.17.0`；
 - Poppler Windows x64 `23.11.0-0`。
 
 组件会进入 `resources/pdf-runtime/win32-x64/`，并写入 `resources/pdf-runtime/manifest.json`。
@@ -135,8 +135,12 @@ PDF skill 和所有 Agent/skill/script 子进程都会收到：
 `AIONUI_PYTHON`、`AIONUI_PDF_RUNTIME`、`AIONUI_PDF_POPPLER`、`AIONUI_PYTHON_VERSION`。
 因此脚本应优先调用 `$env:AIONUI_PYTHON`，`pdf2image` 应把
 `poppler_path=$env:AIONUI_PDF_POPPLER` 传给转换函数，禁止离线包内执行 `pip install`。
-OCR/Tesseract、`pdfplumber`、`pypdfium2`、`qpdf`、`pdftk` 等未列入 manifest 的高级能力必须
-提示“离线运行时未提供”，不得静默联网下载或伪装成功。
+图片型 PDF 的默认流程是 Poppler `pdftoppm` 渲染 PNG，再把 PNG 作为图片附件交给配置的
+视觉模型；这条路径不依赖本地 OCR DLL，适合 Win7 内网环境。Tesseract 仅保留为可选 legacy
+fallback，不在 manifest 中，也不得作为 PDF 处理前提。`pdfplumber`、`pypdfium2`、`qpdf`、
+`pdftk` 等其他未列入 manifest 的高级能力必须提示“离线运行时未提供”，不得静默联网下载或
+伪装成功。仓库内置 `pdf/scripts/pdf_to_png.py` 封装了页码范围、DPI 和 Poppler 路径；
+`pdf/scripts/check_env.ps1` 使用 PowerShell 2.0 语法检查 Win7 runtime。
 
 本地验证命令：
 
@@ -145,8 +149,18 @@ node scripts/verify-pdf-runtime.js
 ```
 
 Win7 Action 构建会在 `node scripts/build-with-builder.js x64 --win --x64 --win7` 中自动准备、校验并
-将该目录放入最终 ZIP；便携包验收时应检查 `resources/pdf-runtime/python.exe`、四个 Python 包、
-`poppler/pdftoppm.exe` 和 manifest 哈希均存在。
+将该目录放入最终 ZIP；便携包验收时应检查 `resources/pdf-runtime/python.exe`、五个 Python 包（含
+`typing_extensions`）、`poppler/pdftoppm.exe` 和 manifest 哈希均存在。
+
+### Skill 工具接口契约
+
+Skill 快捷工具报 `Skill 'pdf' not found` 且 `Available skills:` 为空时，先区分工具层和
+AionCore runtime：`aioncore skills list` 走 `/api/runtime/skills`，成功响应是
+`{ success: true, data: { skills: [...] } }`；普通 `GET /api/skills` 是桌面技能目录接口，
+成功响应是 `{ success: true, data: [...] }`。两种结构都属于仓库内的既有契约，不能为了适配
+外部工具而把 `/api/skills` 改成对象，否则会破坏桌面 UI 和既有测试。外部 Skill parser 应
+调用 `/api/runtime/skills`，或同时兼容 `data.skills` 与 `data` 为数组；当前仓库未包含该
+外部 parser，因此这里只记录契约和排查结论。
 
 ## 验证清单
 

@@ -19,12 +19,6 @@ const TARGET_ROOT = path.join(RUNTIME_ROOT, 'win32-x64');
 const MANIFEST_PATH = path.join(RUNTIME_ROOT, 'manifest.json');
 const PYTHON_VERSION = '3.8.10';
 const POPPLER_VERSION = '23.11.0-0';
-const TESSERACT_VERSION = '5.4.0.20240606';
-const TESSERACT_URL = process.env.AIONUI_TESSERACT_URL || `https://github.com/UB-Mannheim/tesseract/releases/download/v${TESSERACT_VERSION}/tesseract-ocr-w64-setup-${TESSERACT_VERSION}.exe`;
-const TESSDATA_URLS = {
-  eng: 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/eng.traineddata',
-  chi_sim: 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/chi_sim.traineddata',
-};
 const POPPLER_URL =
   process.env.AIONUI_POPPLER_URL ||
   `https://github.com/oschwartz10612/poppler-windows/releases/download/v${POPPLER_VERSION}/Release-${POPPLER_VERSION}.zip`;
@@ -33,7 +27,7 @@ const PACKAGE_VERSIONS = {
   reportlab: '4.2.5',
   Pillow: '10.4.0',
   pdf2image: '1.17.0',
-  pytesseract: '0.3.13',
+  typing_extensions: '4.13.2',
 };
 
 function parseArgs() {
@@ -178,33 +172,14 @@ function preparePoppler(targetRoot, wheelDir) {
   return path.relative(targetRoot, destination).replace(/\\/g, '/');
 }
 
-function prepareTesseract(targetRoot, wheelDir) {
-  const installer = path.join(wheelDir, `tesseract-${TESSERACT_VERSION}.exe`);
-  if (!fs.existsSync(installer)) download(TESSERACT_URL, installer);
-  const extracted = path.join(wheelDir, 'tesseract-extracted');
-  fs.rmSync(extracted, { recursive: true, force: true });
-  fs.mkdirSync(extracted, { recursive: true });
-  const extractor = process.platform === 'win32' ? '7z' : '7z';
-  run(extractor, ['x', '-y', `-o${extracted}`, installer]);
-  const destination = path.join(targetRoot, 'tesseract');
-  fs.rmSync(destination, { recursive: true, force: true });
-  fs.mkdirSync(destination, { recursive: true });
-  const tessExe = findFile(extracted, 'tesseract.exe');
-  if (!tessExe) throw new Error('Tesseract 安装包中未找到 tesseract.exe');
-  fs.copyFileSync(tessExe, path.join(destination, 'tesseract.exe'));
-  const tessdata = path.join(destination, 'tessdata');
-  fs.mkdirSync(tessdata, { recursive: true });
-  for (const [lang, url] of Object.entries(TESSDATA_URLS)) {
-    const target = path.join(tessdata, `${lang}.traineddata`);
-    download(url, target);
-  }
-}
-
 function findFile(root, name) {
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     const full = path.join(root, entry.name);
     if (entry.isFile() && entry.name.toLowerCase() === name.toLowerCase()) return full;
-    if (entry.isDirectory()) { const found = findFile(full, name); if (found) return found; }
+    if (entry.isDirectory()) {
+      const found = findFile(full, name);
+      if (found) return found;
+    }
   }
   return null;
 }
@@ -231,14 +206,6 @@ function writeManifest(targetRoot, popplerRelative) {
     },
     packages: PACKAGE_VERSIONS,
     poppler: { version: POPPLER_VERSION, source: POPPLER_URL, relativeBin: popplerRelative },
-    ocr: {
-      engine: 'tesseract',
-      version: TESSERACT_VERSION,
-      executable: 'tesseract/tesseract.exe',
-      tessdata: 'tesseract/tessdata',
-      languages: Object.keys(TESSDATA_URLS),
-      source: TESSERACT_URL,
-    },
     files,
   };
   fs.writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -269,7 +236,6 @@ function main() {
   try {
     preparePython(TARGET_ROOT, staging);
     const popplerRelative = preparePoppler(TARGET_ROOT, staging);
-    prepareTesseract(TARGET_ROOT, staging);
     writeManifest(TARGET_ROOT, popplerRelative);
     run(process.execPath, [path.join(__dirname, 'verify-pdf-runtime.js')]);
   } catch (error) {

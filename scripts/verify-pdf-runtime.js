@@ -25,7 +25,7 @@ function main() {
 
   const pythonExe = path.join(TARGET_ROOT, manifest.python.executable || 'python.exe');
   if (!fs.existsSync(pythonExe)) fail('缺少 python.exe');
-  const required = ['pypdf', 'reportlab', 'PIL', 'pdf2image', 'pytesseract'];
+  const required = ['pypdf', 'reportlab', 'PIL', 'pdf2image', 'typing_extensions'];
   for (const packageName of required) {
     const candidates = packageName === 'PIL' ? ['PIL', 'Pillow'] : [packageName];
     if (!candidates.some((name) => fs.existsSync(path.join(TARGET_ROOT, 'Lib', 'site-packages', name)))) {
@@ -34,12 +34,7 @@ function main() {
   }
   const popplerBin = path.join(TARGET_ROOT, manifest.poppler.relativeBin, 'pdftoppm.exe');
   if (!fs.existsSync(popplerBin)) fail(`缺少 Poppler: ${popplerBin}`);
-  const ocrExe = path.join(TARGET_ROOT, manifest.ocr?.executable || 'tesseract/tesseract.exe');
-  if (!fs.existsSync(ocrExe)) fail(`缺少 Tesseract: ${ocrExe}`);
-  for (const lang of manifest.ocr?.languages || ['eng', 'chi_sim']) {
-    const traineddata = path.join(TARGET_ROOT, manifest.ocr?.tessdata || 'tesseract/tessdata', `${lang}.traineddata`);
-    if (!fs.existsSync(traineddata)) fail(`缺少 OCR 语言包: ${traineddata}`);
-  }
+  // Tesseract is optional; scanned PDFs use Poppler rendering plus the vision model.
 
   for (const [relative, expected] of Object.entries(manifest.files || {})) {
     const fullPath = path.join(TARGET_ROOT, relative);
