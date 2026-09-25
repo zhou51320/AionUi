@@ -80,6 +80,52 @@ pub fn view_skills_dir(data_dir: &Path, user_id: &str, conversation_id: &str) ->
     Ok(view_dir(data_dir, user_id, conversation_id)?.join(SKILLS_SUBDIR))
 }
 
+/// Rebuild the native skill directory used by the embedded Aion CLI.
+///
+/// Aion CLI discovers skills from `<workspace>/.aionrs/skills/<name>/SKILL.md`.
+/// This is intentionally separate from the Claude/Codex session view: Aion CLI
+/// does not receive a plugin root or an `extraRoots` protocol request.
+pub async fn rebuild_aionrs_workspace_skills(
+    workspace: &Path,
+    skills: &[ResolvedAgentSkill],
+) -> Result<usize, ExtensionError> {
+    let skills_dir = workspace.join(".aionrs").join("skills");
+    tokio::fs::create_dir_all(&skills_dir).await?;
+
+    let mut desired = HashSet::new();
+    for skill in skills {
+        if !tokio::fs::try_exists(&skill.source_path).await.unwrap_or(false) {
+            warn!(skill = %skill.name, "aionrs skill source missing; skipping");
+            continue;
+        }
+        desired.insert(skill.name.clone());
+        let target = skills_dir.join(&skill.name);
+        if tokio::fs::try_exists(&target).await.unwrap_or(false) {
+            continue;
+        }
+        if let Err(error) = create_symlink(&skill.source_path, &target).await {
+            warn!(skill = %skill.name, error = %error, "failed to link aionrs workspace skill");
+        }
+    }
+
+    let mut linked = 0usize;
+    let mut entries = tokio::fs::read_dir(&skills_dir).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !desired.contains(&name) {
+            let path = entry.path();
+            let metadata = tokio::fs::symlink_metadata(&path).await?;
+            if metadata.file_type().is_symlink() {
+                tokio::fs::remove_file(path).await?;
+            }
+        } else {
+            linked += 1;
+        }
+    }
+    info!(workspace = %workspace.display(), skills = linked, "aionrs workspace skills synchronized");
+    Ok(linked)
+}
+
 fn plugin_manifest_body() -> String {
     serde_json::json!({
         "name": PLUGIN_NAME,
@@ -653,5 +699,24 @@ mod tests {
             HashSet::from(["alpha".to_owned()]),
             "a dropped skill must actually disappear"
         );
+    }
+
+    #[tokio::test]
+    async fn aionrs_workspace_layout_is_discoverable_and_stale_links_are_removed() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let sources = tmp.path().join("sources");
+        std::fs::create_dir_all(&sources).unwrap();
+        let workspace = tmp.path().join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+        let alpha = write_source_skill(&sources, "alpha");
+        let beta = write_source_skill(&sources, "beta");
+
+        assert_eq!(rebuild_aionrs_workspace_skills(&workspace, &[alpha.clone(), beta]).await.unwrap(), 2);
+        assert!(workspace.join(".aionrs/skills/alpha/SKILL.md").is_file());
+        assert!(workspace.join(".aionrs/skills/beta/SKILL.md").is_file());
+
+        assert_eq!(rebuild_aionrs_workspace_skills(&workspace, &[alpha]).await.unwrap(), 1);
+        assert!(workspace.join(".aionrs/skills/alpha/SKILL.md").is_file());
+        assert!(!workspace.join(".aionrs/skills/beta").exists());
     }
 }

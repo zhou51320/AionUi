@@ -69,6 +69,11 @@ pub trait SkillResolver: Send + Sync {
         0
     }
 
+    /// Synchronize the native skill directory used by Aion CLI.
+    async fn sync_aionrs_workspace_skills(&self, _workspace: &std::path::Path, _skills: &[ResolvedAgentSkill]) -> usize {
+        0
+    }
+
     /// Drop this conversation's skill view directory. No-op by default, for the
     /// same reason as [`Self::sync_skill_view`].
     async fn remove_skill_view(&self, _user_id: &str, _conversation_id: &str) {}
@@ -182,6 +187,20 @@ impl SkillResolver for ExtensionSkillResolver {
                     error = %e,
                     "sync_skill_view failed; native skill delivery unavailable for this session"
                 );
+                0
+            }
+        }
+    }
+
+    async fn sync_aionrs_workspace_skills(
+        &self,
+        workspace: &std::path::Path,
+        skills: &[ResolvedAgentSkill],
+    ) -> usize {
+        match aionui_extension::skill_view::rebuild_aionrs_workspace_skills(workspace, skills).await {
+            Ok(n) => n,
+            Err(error) => {
+                tracing::error!(workspace = %workspace.display(), error = %error, "aionrs workspace skill sync failed");
                 0
             }
         }

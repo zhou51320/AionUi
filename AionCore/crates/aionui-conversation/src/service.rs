@@ -1150,9 +1150,8 @@ impl ConversationService {
                 .map(str::to_owned)
         });
 
-        // Statement, not a binding: the path itself is no longer needed now that
-        // skill delivery does not write into the workspace. The side effects still
-        // are -- creating the directory and recording it in `extra.workspace`.
+        // The workspace is also the native skill root for the embedded Aion CLI.
+        // Keep it recorded even when no native skills are selected.
         if user_supplied_workspace.is_none() {
             // Per-conversation temp workspaces live under
             // `{data_dir}/conversations/YYYY/MM/DD/{label}-temp-{id}/`.
@@ -1310,12 +1309,9 @@ impl ConversationService {
 
         // Build the per-conversation skill VIEW under AionUi's own data dir.
         //
-        // This REPLACED a step that symlinked the resolved skills into the
-        // workspace's native skills dir (`.claude/skills/` and friends) for both
-        // temp and user-selected workspaces. AionUi no longer writes there at
-        // all: the workspace may be a git repository, the directories were never
-        // cleaned up, and a failed symlink used to degrade into copying real
-        // files in. See `workspace_is_untouched_*` in service_test.rs.
+        // Claude/Codex use this private view. Aion CLI is different: its official
+        // discovery contract is the workspace `.aionrs/skills` directory, so
+        // that directory is synchronized separately below.
         //
         // Unconditional on the delivery mode: the view is our own tree, so
         // building it for every conversation means a mode flipped in the registry
@@ -1327,6 +1323,13 @@ impl ConversationService {
                 .await;
             if !resolved.is_empty() {
                 self.skill_resolver.sync_skill_view(user_id, &id, &resolved).await;
+                if effective_type == AgentType::Aionrs {
+                    if let Some(workspace) = extra.get("workspace").and_then(|v| v.as_str()) {
+                        self.skill_resolver
+                            .sync_aionrs_workspace_skills(std::path::Path::new(workspace), &resolved)
+                            .await;
+                    }
+                }
             }
         }
 
@@ -4914,6 +4917,11 @@ impl ConversationService {
             .await;
         if resolved.is_empty() {
             return;
+        }
+        if context.conversation.agent_type == aionui_common::AgentType::Aionrs {
+            self.skill_resolver
+                .sync_aionrs_workspace_skills(std::path::Path::new(&context.workspace.path), &resolved)
+                .await;
         }
         self.skill_resolver
             .sync_skill_view(&context.conversation.user_id, context.conversation_id(), &resolved)
